@@ -1,0 +1,25 @@
+.DS_Store
+.env
+# Local copies and backups of the environment file; only the example is tracked.
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/evals/reports/
+backend/.eval-scratch/
+frontend/node_modules/
+frontend/dist/
+data/*
+!data/.gitkeep
+workspaces/*
+!workspaces/.gitkeep

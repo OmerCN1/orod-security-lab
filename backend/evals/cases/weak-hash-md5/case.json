@@ -1,0 +1,19 @@
+{
+  "id": "weak-hash-md5",
+  "title": "MD5 used to fingerprint security-relevant payloads",
+  "cwe": "CWE-327",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B324",
+      "file_path": "app.py",
+      "severity": "high"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "crypto"
+  ],
+  "rationale": "SHA-256 is a drop-in replacement for a hex digest of at least 32 characters."
+}

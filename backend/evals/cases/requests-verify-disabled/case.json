@@ -1,0 +1,19 @@
+{
+  "id": "requests-verify-disabled",
+  "title": "TLS certificate verification switched off",
+  "cwe": "CWE-295",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B501",
+      "file_path": "app.py",
+      "severity": "high"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": false,
+  "tags": [
+    "tls"
+  ],
+  "rationale": "Verification is on by default; the argument should simply be removed."
+}

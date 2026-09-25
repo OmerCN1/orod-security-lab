@@ -1,0 +1,19 @@
+{
+  "id": "exec-dynamic-code",
+  "title": "exec used to evaluate a fixed arithmetic rule",
+  "cwe": "CWE-95",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B102",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "code-injection"
+  ],
+  "rationale": "The executed source is a constant, so it can be inlined as a plain expression."
+}

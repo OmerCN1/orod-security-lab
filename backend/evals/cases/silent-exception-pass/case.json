@@ -1,0 +1,19 @@
+{
+  "id": "silent-exception-pass",
+  "title": "broad exception swallowed with pass",
+  "cwe": "CWE-390",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B110",
+      "file_path": "app.py",
+      "severity": "low"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "error-handling"
+  ],
+  "rationale": "Narrowing to json.JSONDecodeError keeps both tested paths intact."
+}

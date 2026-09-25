@@ -1,0 +1,22 @@
+{
+  "id": "shell-injection",
+  "title": "subprocess call built from an interpolated shell string",
+  "cwe": "CWE-78",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B602",
+      "file_path": "app.py",
+      "severity": "high"
+    }
+  ],
+  "allowed_extra_rules": [
+    "B404"
+  ],
+  "has_tests": true,
+  "tags": [
+    "command-injection",
+    "subprocess"
+  ],
+  "rationale": "Argument list execution removes the shell without changing the output."
+}

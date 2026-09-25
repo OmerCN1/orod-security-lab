@@ -1,0 +1,19 @@
+{
+  "id": "assert-based-authorization",
+  "title": "authorization enforced with a bare assert",
+  "cwe": "CWE-617",
+  "expected_outcome": "manual_review",
+  "expected_findings": [
+    {
+      "rule_id": "B101",
+      "file_path": "app.py",
+      "severity": "low"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "policy"
+  ],
+  "rationale": "Policy routes B101 to a human because rewriting it changes control flow."
+}

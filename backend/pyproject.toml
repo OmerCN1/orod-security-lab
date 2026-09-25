@@ -1,0 +1,70 @@
+[project]
+name = "orod"
+version = "0.1.0"
+description = "Local-first autonomous code security and refactoring team"
+readme = "../README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "aiosqlite>=0.20",
+  "anthropic>=0.69",
+  "alembic>=1.14",
+  "bandit[toml]>=1.8",
+  "chromadb>=1.0",
+  "fastapi[standard]>=0.135",
+  "httpx>=0.28",
+  "langchain-core>=1.0",
+  "langchain-ollama>=1.0",
+  "langgraph>=1.0",
+  "langgraph-checkpoint-sqlite>=3.0",
+  "pydantic-settings>=2.7",
+  "ruff>=0.9",
+  "semgrep>=1.100",
+  "sqlalchemy>=2.0",
+  "structlog>=25.1",
+  "tenacity>=9.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.14",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "pytest-cov>=6.0",
+  "respx>=0.22",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+norecursedirs = ["tests/fixtures", "evals/cases"]
+# The evaluation harness lives outside the installed package but is unit tested.
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Corpus repositories are intentionally vulnerable; they are inputs, not source.
+extend-exclude = ["evals/cases"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
+ignore = ["S101", "ASYNC240"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/fixtures/**" = ["S602", "S607"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["orod"]
+# Corpus repositories are deliberately unannotated sample code, and several share
+# module names by design.
+exclude = ["^evals/cases/"]
+
+[tool.coverage.run]
+source = ["orod"]

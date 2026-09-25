@@ -1,0 +1,19 @@
+{
+  "id": "sql-injection-format",
+  "title": "SQL statement assembled with string formatting",
+  "cwe": "CWE-89",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B608",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "sql-injection"
+  ],
+  "rationale": "A bound parameter produces identical rows for the tested input."
+}

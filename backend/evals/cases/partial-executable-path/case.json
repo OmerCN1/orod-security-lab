@@ -1,0 +1,23 @@
+{
+  "id": "partial-executable-path",
+  "title": "subprocess launched through a partial executable path",
+  "cwe": "CWE-426",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B607",
+      "file_path": "app.py",
+      "severity": "low"
+    }
+  ],
+  "allowed_extra_rules": [
+    "B404",
+    "B603"
+  ],
+  "has_tests": true,
+  "tags": [
+    "path-hijack",
+    "subprocess"
+  ],
+  "rationale": "Resolving argv[0] with shutil.which prevents PATH hijacking."
+}

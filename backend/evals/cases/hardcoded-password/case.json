@@ -1,0 +1,19 @@
+{
+  "id": "hardcoded-password",
+  "title": "database password embedded as a module constant",
+  "cwe": "CWE-798",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B105",
+      "file_path": "app.py",
+      "severity": "low"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "secrets"
+  ],
+  "rationale": "The secret belongs in the environment; the URL shape must stay the same."
+}

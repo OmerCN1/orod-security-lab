@@ -1,0 +1,19 @@
+{
+  "id": "ssl-unverified-context",
+  "title": "SSL context created without certificate verification",
+  "cwe": "CWE-295",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B323",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "tls"
+  ],
+  "rationale": "ssl.create_default_context() returns the same type with verification on."
+}

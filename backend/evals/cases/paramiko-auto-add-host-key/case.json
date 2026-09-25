@@ -1,0 +1,19 @@
+{
+  "id": "paramiko-auto-add-host-key",
+  "title": "SSH client accepting unknown host keys automatically",
+  "cwe": "CWE-322",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B507",
+      "file_path": "app.py",
+      "severity": "high"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": false,
+  "tags": [
+    "ssh"
+  ],
+  "rationale": "RejectPolicy plus a loaded known_hosts file restores host verification."
+}

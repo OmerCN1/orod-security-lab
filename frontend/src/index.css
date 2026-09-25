@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/*
+ * Dark-only developer tool. The palette is deliberately narrow: three surface levels,
+ * one border tone, one accent. Depth comes from 1px borders and surface steps rather
+ * than glows, which is what keeps dense panels readable for long periods.
+ *
+ * Status colours (pass/hold/fail/busy) are kept separate from the accent so "this needs
+ * attention" never competes with "this is interactive". Agent identity colours are used
+ * only on avatar rings — never as a fill — so five agents do not become five themes.
+ */
+:root {
+  --ground: #07080b;
+  --pane: #0c0e13;
+  --raise: #12151d;
+  --raise-2: #191d27;
+
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.14);
+
+  --text: #e7eaf0;
+  --muted: #8d95a5;
+  --faint: #5b6273;
+  --ghost: #3d4351;
+
+  --accent: #4f9cf9;
+
+  --pass: #34d399;
+  --hold: #fbbf24;
+  --fail: #fb7185;
+  --busy: #4f9cf9;
+
+  --id-architect: #60a5fa;
+  --id-security: #fbbf24;
+  --id-developer: #a78bfa;
+  --id-validator: #22d3ee;
+  --id-reviewer: #34d399;
+
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--ground);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+/*
+ * An inline SVG with no size expands to its intrinsic 300x150 and bursts whatever
+ * contains it. This floor makes a forgotten size a cosmetic slip instead of a broken
+ * layout; every explicit size below is a class selector and still wins.
+ */
+svg { flex: none; }
+
+/* The document scrolls. Panels grow to fit their content rather than each owning a
+   private scrollbar, so a long diff is read by scrolling the page. */
+html, body, #root { min-height: 100%; }
+body { margin: 0; min-width: 960px; background: var(--ground); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Horizontal bars sit under content strips, so they stay slimmer than vertical ones. */
+::-webkit-scrollbar { width: 9px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .18); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .3); }
+
+/* --- typographic roles ------------------------------------------------------ */
+
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace; font-variant-ligatures: none; }
+.num { font-variant-numeric: tabular-nums; }
+.label {
+  @apply text-[10px] font-medium uppercase;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  letter-spacing: .16em;
+  color: var(--faint);
+}
+
+/* --- structure -------------------------------------------------------------- */
+
+.divider { border-color: var(--line); }
+.bar {
+  @apply flex shrink-0 items-center gap-3;
+  border-bottom: 1px solid var(--line);
+}
+/* Bars that stay put while the page scrolls under them. Each needs its own opaque
+   background or the content shows through. */
+.stick-top { @apply sticky z-20; top: 0; background: var(--pane); }
+.stick-sub { @apply sticky z-10; top: 48px; }
+
+.empty {
+  @apply flex min-h-24 flex-1 items-center justify-center px-6 text-center text-[12px] leading-5;
+  color: var(--faint);
+}
+
+/* --- controls ---------------------------------------------------------------- */
+
+.field {
+  @apply w-full rounded-md border px-2.5 py-2 text-[12px] outline-none transition;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  border-color: var(--line);
+  background: var(--ground);
+}
+.field::placeholder { color: var(--ghost); }
+.field:focus { border-color: var(--line-strong); background: var(--raise); }
+
+/* Tailwind v4 cannot @apply a non-utility class, so each variant carries the base. */
+@utility btn-base {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-[12.5px] font-medium transition;
+}
+.btn-primary { @apply btn-base font-semibold text-[#04070d]; background: var(--accent); }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-ghost { @apply btn-base; border: 1px solid var(--line-strong); color: var(--muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--raise); color: var(--text); }
+.btn-success { @apply btn-base font-semibold text-[#04281c]; background: var(--pass); }
+.btn-success:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-danger {
+  @apply btn-base;
+  border: 1px solid rgba(251, 113, 133, .35);
+  background: rgba(251, 113, 133, .09);
+  color: #fda4af;
+}
+.btn-danger:hover:not(:disabled) { background: rgba(251, 113, 133, .17); }
+/*
+ * `@apply btn-base` inlines the utility's declarations rather than adding the class to
+ * the element, so a `.btn-base:disabled` rule would never match. Each variant is named.
+ */
+.btn-primary:disabled,
+.btn-ghost:disabled,
+.btn-success:disabled,
+.btn-danger:disabled {
+  opacity: .45;
+  filter: none;
+  background: var(--raise-2);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+/* --- chips / tabs ------------------------------------------------------------ */
+
+.chip {
+  @apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-[11.5px] transition;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.chip:hover { border-color: var(--line-strong); background: var(--raise); color: var(--text); }
+.chip-active { border-color: var(--line-strong); background: var(--raise-2); color: var(--text); }
+
+.tab {
+  @apply inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-[12.5px] font-medium transition;
+  color: var(--faint);
+}
+.tab:hover:not(:disabled) { color: var(--muted); }
+.tab-active { background: var(--raise-2); color: var(--text); }
+.tab-count {
+  @apply rounded-full px-1.5 py-px text-[10.5px] font-medium;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  background: rgba(255, 255, 255, .06);
+  color: var(--muted);
+}
+
+/* --- code -------------------------------------------------------------------- */
+
+.code-block {
+  @apply overflow-auto p-3 text-[11px] leading-[1.65];
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: var(--muted);
+  background: var(--ground);
+}
+
+/* --- motion ------------------------------------------------------------------ */
+
+@keyframes orod-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 var(--halo, rgba(79, 156, 249, .5)); }
+  65% { box-shadow: 0 0 0 6px transparent; }
+}
+.breathe { animation: orod-breathe 1.6s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .breathe { animation: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

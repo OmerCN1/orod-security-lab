@@ -1,0 +1,13 @@
+{
+  "id": "clean-repository",
+  "title": "correct HMAC verification with no security defect",
+  "cwe": "none",
+  "expected_outcome": "clean",
+  "expected_findings": [],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "control"
+  ],
+  "rationale": "Negative control: any finding here is a false positive."
+}

@@ -1,0 +1,19 @@
+{
+  "id": "eval-untrusted-input",
+  "title": "eval used to parse a configuration literal",
+  "cwe": "CWE-95",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B307",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "code-injection"
+  ],
+  "rationale": "ast.literal_eval accepts the same literal syntax without executing code."
+}

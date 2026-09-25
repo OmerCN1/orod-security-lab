@@ -1,0 +1,21 @@
+{
+  "id": "xml-entity-expansion",
+  "title": "untrusted XML parsed with the stdlib ElementTree",
+  "cwe": "CWE-611",
+  "expected_outcome": "detect_only",
+  "expected_findings": [
+    {
+      "rule_id": "B314",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [
+    "B405"
+  ],
+  "has_tests": true,
+  "tags": [
+    "xxe"
+  ],
+  "rationale": "The accepted remedy is defusedxml, a new dependency the patch policy forbids, so only detection is scored."
+}

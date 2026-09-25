@@ -1,0 +1,20 @@
+{
+  "id": "insecure-random-token",
+  "title": "session token generated from the random module",
+  "cwe": "CWE-330",
+  "expected_outcome": "manual_review",
+  "expected_findings": [
+    {
+      "rule_id": "B311",
+      "file_path": "app.py",
+      "severity": "low"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "crypto",
+    "policy"
+  ],
+  "rationale": "Policy routes low-severity B311 to a human; the run must not patch it."
+}

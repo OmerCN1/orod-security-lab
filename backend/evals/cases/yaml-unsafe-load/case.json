@@ -1,0 +1,19 @@
+{
+  "id": "yaml-unsafe-load",
+  "title": "YAML deserialised with the unrestricted loader",
+  "cwe": "CWE-502",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B506",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": false,
+  "tags": [
+    "deserialisation"
+  ],
+  "rationale": "yaml.safe_load parses the same documents without constructing objects."
+}

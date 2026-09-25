@@ -1,0 +1,21 @@
+{
+  "id": "pickle-untrusted-data",
+  "title": "pickle round-trip used as a cache format",
+  "cwe": "CWE-502",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B301",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [
+    "B403"
+  ],
+  "has_tests": true,
+  "tags": [
+    "deserialisation"
+  ],
+  "rationale": "Both ends of the round trip are local, so JSON preserves behaviour."
+}

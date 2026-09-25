@@ -1,0 +1,19 @@
+{
+  "id": "hardcoded-tmp-path",
+  "title": "audit log written to a hardcoded /tmp path",
+  "cwe": "CWE-377",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B108",
+      "file_path": "app.py",
+      "severity": "medium"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": true,
+  "tags": [
+    "filesystem"
+  ],
+  "rationale": "tempfile.gettempdir() keeps the filename while removing the fixed path."
+}

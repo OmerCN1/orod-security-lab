@@ -1,0 +1,19 @@
+{
+  "id": "jinja2-autoescape-disabled",
+  "title": "Jinja2 environment created with autoescape disabled",
+  "cwe": "CWE-79",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "B701",
+      "file_path": "app.py",
+      "severity": "high"
+    }
+  ],
+  "allowed_extra_rules": [],
+  "has_tests": false,
+  "tags": [
+    "xss"
+  ],
+  "rationale": "autoescape=True is a one-argument change."
+}
