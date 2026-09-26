@@ -15,8 +15,15 @@ integrity of generated patches, and the developer's machine.
 - Patch scope: parse all file headers and hunk boundaries, require an exact match
   to `changed_files`, and reject renames, adds/deletes, mode changes, binary targets,
   hidden paths and symlink components before invoking `git apply`.
-- Path traversal/symlink escape: all paths are resolved under a run root and
-  symlinks are excluded.
+- Path traversal/symlink escape: repository inventory, dependency discovery, working
+  source reads, patch target validation, Python summaries, the built-in scanner and
+  container input copies share `RepositoryFiles`. Relative paths must be canonical;
+  hidden/ignored paths and private-key filenames are excluded. Directory descriptors
+  and `O_NOFOLLOW` reject symlink files and parent directories at open time, before
+  resolution can hide the link. Only regular UTF-8 text files within the configured
+  byte limit are read, with a bounded read rechecking size after metadata inspection.
+  Git base reads also verify blob mode and size. Fixture copies preserve links so the
+  common policy can reject them instead of first dereferencing their targets.
 - Destructive Git operations: merge, reset, clean, and force-push are absent.
 - Secret leakage: structured events contain summaries, not environments,
   credentials, or arbitrary file contents.

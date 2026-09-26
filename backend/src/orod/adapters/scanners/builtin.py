@@ -4,25 +4,30 @@ import ast
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
+from orod.adapters.repository.files import RepositoryFiles
+from orod.domain.errors import UnsafePathError
 from orod.domain.models import Confidence, Finding, FindingSource, RepositorySnapshot, Severity
 
 
 class BuiltinPythonScanner:
     name = "builtin-python"
 
+    def __init__(self, max_file_bytes: int = 1_000_000, workspace_root: Path | None = None) -> None:
+        self._max_file_bytes = max_file_bytes
+        self._workspace_root = workspace_root
+
     async def scan(self, snapshot: RepositorySnapshot) -> list[Finding]:
-        root = Path(snapshot.workspace_path).resolve()
+        reader = RepositoryFiles(
+            Path(snapshot.workspace_path), self._max_file_bytes, workspace_root=self._workspace_root
+        )
         findings: list[Finding] = []
         for entry in snapshot.files:
             if entry.language != "python":
                 continue
-            path = (root / entry.path).resolve()
-            if not path.is_relative_to(root) or path.is_symlink():
-                continue
             try:
-                source = path.read_text()
+                source = reader.read(entry.path).content
                 tree = ast.parse(source)
-            except (OSError, UnicodeDecodeError, SyntaxError):
+            except (UnsafePathError, SyntaxError):
                 continue
             lines = source.splitlines()
             for node in ast.walk(tree):

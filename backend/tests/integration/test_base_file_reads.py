@@ -69,3 +69,32 @@ async def test_base_read_refuses_to_escape_the_workspace(tmp_path: Path) -> None
 
     with pytest.raises(UnsafePathError):
         await adapter.read_base_files(snapshot, ["../../etc/passwd"])
+
+
+@pytest.mark.parametrize("base_kind", ["symlink", "binary", "invalid_utf8", "oversized"])
+async def test_safe_working_file_does_not_make_unsafe_git_blob_readable(
+    tmp_path: Path,
+    base_kind: str,
+) -> None:
+    repo = tmp_path / "repo"
+    build_repository(repo, "value = 1\n")
+    target = repo / "app.py"
+    if base_kind == "symlink":
+        target.unlink()
+        target.symlink_to(tmp_path / "not-read.py")
+    elif base_kind == "binary":
+        target.write_bytes(b"value = 1\n\x00")
+    elif base_kind == "invalid_utf8":
+        target.write_bytes(b"value = 1\n\xff")
+    else:
+        target.write_text("#" * 129)
+    runner = SafeCommandRunner({"git"}, tmp_path)
+    assert (await runner.run(["git", "add", "app.py"], repo)).return_code == 0
+    assert (await runner.run(["git", "commit", "-m", "unsafe base"], repo)).return_code == 0
+    target.unlink()
+    target.write_text("value = 1\n")
+    adapter = GitRepositoryAdapter(Settings(workspace_root=tmp_path, max_file_bytes=128), runner)
+    snapshot = RepositorySnapshot(repository_url="demo://x", workspace_path=str(repo))
+    assert await adapter.read_files(snapshot, ["app.py"]) == {"app.py": "value = 1\n"}
+    with pytest.raises(UnsafePathError):
+        await adapter.read_base_files(snapshot, ["app.py"])

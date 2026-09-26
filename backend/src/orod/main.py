@@ -68,7 +68,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         vulnerabilities_adapter = OSVVulnerabilityAdapter(vector_store)
         llm_registry = CachingLLMProviderRegistry(configured)
         llm = llm_registry.default()
-        scanners: list[SecurityScanner] = [BuiltinPythonScanner(), BanditScanner(runner)]
+        scanners: list[SecurityScanner] = [
+            BuiltinPythonScanner(configured.max_file_bytes, configured.workspace_root),
+            BanditScanner(runner),
+        ]
         if configured.enable_external_scanners:
             scanners.append(SemgrepScanner(runner))
         publisher = GitHubCLIPublisher(runner)

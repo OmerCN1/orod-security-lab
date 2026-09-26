@@ -6,6 +6,14 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Added one `RepositoryFiles` policy for inventory, manifest discovery, source reads,
+  patch targets, Python summaries, residual checks, the built-in scanner and container
+  copies. Descriptor-relative `O_NOFOLLOW` opens reject symlink files/parents before
+  resolution; regular-file, hidden-path, UTF-8/binary and byte-budget checks are shared.
+- Dependency discovery no longer follows internal/external manifest symlinks or reads
+  oversized/binary requirements. Fixture copies preserve links for policy rejection.
+  Git base reads verify the working path plus the original blob mode, size and text
+  content (ADR 0006).
 - Strict unified-diff target parsing now requires an exact match with `changed_files`.
   Hidden files, symlink components, binary/oversized files, renames, adds/deletes,
   mode changes and ambiguous metadata are rejected before any patch is applied.
@@ -118,13 +126,15 @@ Phase 9 — Agent-centred dashboard
 - Review host-side clone/parsing/scanning boundaries before accepting arbitrary hostile
   third-party repositories. Validation isolation is implemented and tested; exercise an
   operator-built dependency image on a representative trusted GitHub repository next.
+- Route external Bandit/Semgrep scans through the same filtered repository input;
+  their subprocess file walkers are not yet governed by the shared adapter reader.
 
 ## Known Issues
 
 - The default validation image only includes pytest, Ruff and Bandit; projects needing
-  other packages require an operator-maintained image. Hidden config and symlinks are
-  deliberately excluded from its input copy. Isolation covers validation, not the
-  entire host-side analysis pipeline.
+  other packages require an operator-maintained image. Hidden config, symlinks, binary
+  and oversized files are deliberately excluded from its input copy. Isolation covers
+  validation, not the entire host-side analysis pipeline.
 - **`qwen2.5-coder:14b` cannot emit a usable unified diff.** Over the 20-case corpus it
   matched the deterministic baseline exactly (auto-fix 1/16) and contributed nothing: 15 of
   16 fix cases ended with `git apply` rejecting the diff as corrupt, and the one success was
@@ -148,6 +158,12 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Shared file policy: `uv run --no-sync pytest -q` — 178 passed, 1 opt-in Docker
+  test skipped in the default run. The live Docker test was run separately and passed.
+- Shared file policy: `make lint` — Ruff, strict mypy (70 source files) and frontend
+  ESLint passed. `git diff --check` passed. Frontend code was unchanged.
+- `make eval EVAL_ARGS='--out /private/tmp/orod-file-policy-eval'` — 20/20 cases,
+  unchanged F1 1.00, auto-fix 1/16, patch validity 12%, policy 2/2 and zero regressions.
 - Security/trust update: `uv run pytest -q` — 123 passed, 1 opt-in Docker test skipped
   in the default run. After starting Docker and building the image,
   `OROD_TEST_CONTAINER=1 uv run --no-sync pytest -q tests/integration/test_container_runtime.py`

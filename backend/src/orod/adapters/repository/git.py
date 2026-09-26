@@ -6,8 +6,10 @@ import re
 import shutil
 import sys
 import tomllib
+from itertools import islice
 from pathlib import Path
 
+from orod.adapters.repository.files import RepositoryFiles
 from orod.adapters.repository.patches import patch_targets
 from orod.config import Settings
 from orod.domain.errors import InvalidRepositoryError, PatchRejectedError, UnsafePathError
@@ -26,19 +28,6 @@ GITHUB_REPO_RE = re.compile(
     r"^https://github\.com/(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?$"
 )
 REQUIREMENT_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*(?:==\s*([^\s;]+))?")
-IGNORED_PARTS = {
-    ".git",
-    ".venv",
-    "venv",
-    "node_modules",
-    "dist",
-    "build",
-    "__pycache__",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache",
-}
-SECRET_NAMES = {".env", ".env.local", "id_rsa", "id_ed25519", ".npmrc", ".pypirc"}
 
 
 class GitRepositoryAdapter:
@@ -69,7 +58,7 @@ class GitRepositoryAdapter:
         if demo_match is not None:
             slug = demo_match.group(1)
             source = self._resolve_fixture(slug)
-            shutil.copytree(source, target)
+            shutil.copytree(source, target, symlinks=True)
             await self._initialize_demo_git(target)
             permission = "LOCAL"
             owner_repo = f"demo/{slug}"
@@ -121,23 +110,14 @@ class GitRepositoryAdapter:
     async def read_files(
         self, snapshot: RepositorySnapshot, paths: list[str], max_chars: int = 30_000
     ) -> dict[str, str]:
-        root = Path(snapshot.workspace_path).resolve()
+        root = Path(snapshot.workspace_path)
+        reader = self._files(root)
         output: dict[str, str] = {}
         remaining = max_chars
         for relative in paths:
-            path = self._safe_file(root, relative)
-            if (
-                path.name in SECRET_NAMES
-                or path.is_symlink()
-                or path.stat().st_size > self._settings.max_file_bytes
-            ):
-                continue
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError):
-                continue
             if remaining <= 0:
                 break
+            content = reader.read(relative).content
             output[relative] = content[:remaining]
             remaining -= len(output[relative])
         return output
@@ -147,38 +127,65 @@ class GitRepositoryAdapter:
     ) -> dict[str, str]:
         """Read the pre-patch content of files from the workspace's HEAD commit.
 
-        A generated patch is applied but never committed, so ``git show HEAD:<path>``
-        still yields the original text. That is what lets the dashboard render a
-        side-by-side diff without the API having to cache a copy of every file.
+        Git tree mode and blob size are checked before reading the original content.
+        The working path is subject to the same policy as other repository reads.
         """
-        root = Path(snapshot.workspace_path).resolve()
+        root = Path(snapshot.workspace_path)
+        reader = self._files(root)
         output: dict[str, str] = {}
         remaining = max_chars
         for relative in paths:
             if remaining <= 0:
                 break
-            if Path(relative).is_absolute() or ".." in Path(relative).parts:
-                raise UnsafePathError("unsafe relative path")
-            if Path(relative).name in SECRET_NAMES:
-                continue
-            # The command runner keeps only the *tail* of stdout once its limit is hit,
-            # so it is given the same per-file budget the working-tree reader honours.
-            # Without this a file above the runner's 20k default would come back missing
-            # its beginning while the working side kept its head - the two sides of the
-            # diff would not describe the same region of the file.
-            result = await self._runner.run(
-                ["git", "show", f"HEAD:{relative}"],
-                root,
-                max_output_chars=self._settings.max_file_bytes,
+            # Both revisions enforce the same working-path policy. Also check the
+            # Git blob itself: a safe working file may have an unsafe base revision.
+            reader.read(relative)
+            metadata = await self._runner.run(
+                ["git", "ls-tree", "--full-tree", "-z", "HEAD", "--", relative], root
             )
-            if result.return_code != 0:
+            if metadata.return_code != 0 or metadata.timed_out or not metadata.stdout:
                 continue
-            output[relative] = result.stdout[:remaining]
+            header, separator, name = metadata.stdout.removesuffix("\x00").partition("\t")
+            fields = header.split()
+            if (
+                not separator
+                or name != relative
+                or len(fields) != 3
+                or fields[0] not in {"100644", "100755"}
+                or fields[1] != "blob"
+                or re.fullmatch(r"[a-f0-9]{40,64}", fields[2]) is None
+            ):
+                raise UnsafePathError("base revision is not a regular file")
+            object_id = fields[2]
+            size_result = await self._runner.run(["git", "cat-file", "-s", object_id], root)
+            try:
+                size = int(size_result.stdout.strip())
+            except ValueError as exc:
+                raise UnsafePathError("base file size is unavailable") from exc
+            if (
+                size_result.return_code != 0
+                or size_result.timed_out
+                or not 0 <= size <= reader.max_file_bytes
+            ):
+                raise UnsafePathError("base file exceeds configured byte limit or is unavailable")
+            result = await self._runner.run(
+                ["git", "cat-file", "blob", object_id],
+                root,
+                max_output_chars=reader.max_file_bytes + 1,
+            )
+            if result.return_code != 0 or result.timed_out:
+                continue
+            # CommandRunner decodes stdout with replacement. Refuse lossy decoding
+            # rather than letting a binary Git blob masquerade as a text file.
+            encoded = result.stdout.encode("utf-8")
+            if "\ufffd" in result.stdout or len(encoded) != size:
+                raise UnsafePathError("base file is not complete UTF-8 text")
+            output[relative] = reader.decode_text(encoded)[:remaining]
             remaining -= len(output[relative])
         return output
 
     async def apply_patch(self, snapshot: RepositorySnapshot, patch: PatchProposal) -> str:
-        root = Path(snapshot.workspace_path).resolve()
+        root = Path(snapshot.workspace_path)
         self._validate_patch(root, patch)
         check = await self._runner.run(
             ["git", "apply", "--check", "-"], root, input_text=patch.unified_diff
@@ -196,7 +203,7 @@ class GitRepositoryAdapter:
         return diff.stdout
 
     async def validate(self, snapshot: RepositorySnapshot) -> ValidationResult:
-        root = Path(snapshot.workspace_path).resolve()
+        root = Path(snapshot.workspace_path)
         if not snapshot.trusted:
             return ValidationResult(
                 passed=False,
@@ -305,21 +312,17 @@ class GitRepositoryAdapter:
                 )
 
     def _inventory_files(self, root: Path) -> list[FileEntry]:
-        files: list[FileEntry] = []
-        for path in sorted(root.rglob("*")):
-            relative = path.relative_to(root)
-            if any(part in IGNORED_PARTS for part in relative.parts):
-                continue
-            if path.is_symlink() or not path.is_file() or path.name in SECRET_NAMES:
-                continue
-            size = path.stat().st_size
-            if size > self._settings.max_file_bytes:
-                continue
-            language = "python" if path.suffix == ".py" else None
-            files.append(FileEntry(path=relative.as_posix(), size=size, language=language))
-        return files[:2_000]
+        return [
+            FileEntry(
+                path=item.relative,
+                size=item.size,
+                language="python" if Path(item.relative).suffix == ".py" else None,
+            )
+            for item in islice(self._files(root).iter_files(), 2_000)
+        ]
 
     def _discover_dependencies(self, root: Path) -> list[PackageDependency]:
+        reader = self._files(root)
         found: dict[str, PackageDependency] = {}
 
         def remember(item: PackageDependency) -> None:
@@ -328,41 +331,42 @@ class GitRepositoryAdapter:
             if current is None or (item.version is not None and current.version is None):
                 found[key] = item
 
-        pyproject = root / "pyproject.toml"
-        if pyproject.exists() and pyproject.stat().st_size <= self._settings.max_file_bytes:
-            try:
-                data = tomllib.loads(pyproject.read_text())
-                for raw in data.get("project", {}).get("dependencies", []):
-                    match = REQUIREMENT_RE.match(str(raw))
-                    if match:
-                        remember(
-                            PackageDependency(
-                                name=match.group(1),
-                                version=match.group(2),
-                                source_file="pyproject.toml",
-                            )
+        try:
+            data = tomllib.loads(reader.read("pyproject.toml").content)
+            for raw in data.get("project", {}).get("dependencies", []):
+                match = REQUIREMENT_RE.match(str(raw))
+                if match:
+                    remember(
+                        PackageDependency(
+                            name=match.group(1),
+                            version=match.group(2),
+                            source_file="pyproject.toml",
                         )
-            except (tomllib.TOMLDecodeError, OSError):
-                pass
+                    )
+        except (tomllib.TOMLDecodeError, UnsafePathError):
+            pass
 
-        for requirements in root.glob("*requirements*.txt"):
-            for line in requirements.read_text(errors="ignore").splitlines():
+        for name in reader.names():
+            if "requirements" not in name or not name.endswith(".txt"):
+                continue
+            try:
+                content = reader.read(name).content
+            except UnsafePathError:
+                continue
+            for line in content.splitlines():
                 match = REQUIREMENT_RE.match(line)
                 if match and not line.lstrip().startswith(("#", "-")):
                     remember(
                         PackageDependency(
                             name=match.group(1),
                             version=match.group(2),
-                            source_file=requirements.name,
+                            source_file=name,
                         )
                     )
 
         for lock_name in ("uv.lock", "poetry.lock"):
-            lock_file = root / lock_name
-            if not lock_file.exists() or lock_file.stat().st_size > self._settings.max_file_bytes:
-                continue
             try:
-                data = tomllib.loads(lock_file.read_text())
+                data = tomllib.loads(reader.read(lock_name).content)
                 for package in data.get("package", []):
                     if not isinstance(package, dict) or not package.get("name"):
                         continue
@@ -373,7 +377,7 @@ class GitRepositoryAdapter:
                             source_file=lock_name,
                         )
                     )
-            except (tomllib.TOMLDecodeError, OSError):
+            except (tomllib.TOMLDecodeError, UnsafePathError):
                 pass
         return sorted(found.values(), key=lambda item: item.name.lower())
 
@@ -383,6 +387,7 @@ class GitRepositoryAdapter:
         files: list[FileEntry],
         dependencies: list[PackageDependency],
     ) -> str:
+        reader = self._files(root)
         modules = 0
         imports: set[str] = set()
         functions = 0
@@ -392,8 +397,8 @@ class GitRepositoryAdapter:
                 continue
             modules += 1
             try:
-                tree = ast.parse((root / entry.path).read_text())
-            except (SyntaxError, UnicodeDecodeError, OSError):
+                tree = ast.parse(reader.read(entry.path).content)
+            except (SyntaxError, UnsafePathError):
                 continue
             for node in ast.walk(tree):
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -423,38 +428,19 @@ class GitRepositoryAdapter:
             raise PatchRejectedError("duplicate declared patch target")
         if targets != set(patch.changed_files):
             raise PatchRejectedError("diff targets do not match changed_files")
+        reader = self._files(root)
         for relative in patch.changed_files:
             try:
-                path = self._safe_file(root, relative)
+                reader.read(relative)
             except UnsafePathError as exc:
-                raise PatchRejectedError("unsafe patch target") from exc
-            if path.name in SECRET_NAMES or any(
-                part.startswith(".") for part in Path(relative).parts
-            ):
-                raise PatchRejectedError(f"unsafe patch target: {relative}")
-            if path.suffix not in {".py", ".toml", ".txt", ".lock"}:
+                raise PatchRejectedError(f"unsafe patch target: {exc}") from exc
+            if Path(relative).suffix not in {".py", ".toml", ".txt", ".lock"}:
                 raise PatchRejectedError(f"unsupported patch target: {relative}")
-            if path.stat().st_size > self._settings.max_file_bytes:
-                raise PatchRejectedError("patch target exceeds configured byte limit")
-            try:
-                content = path.read_text(encoding="utf-8")
-            except (UnicodeDecodeError, OSError) as exc:
-                raise PatchRejectedError("patch target is not readable text") from exc
-            if "\x00" in content:
-                raise PatchRejectedError("binary patch target")
 
-    def _safe_file(self, root: Path, relative: str) -> Path:
-        if Path(relative).is_absolute() or ".." in Path(relative).parts:
-            raise UnsafePathError("unsafe relative path")
-        candidate = root
-        for part in Path(relative).parts:
-            candidate = candidate / part
-            if candidate.is_symlink():
-                raise UnsafePathError("symlink file or parent directory")
-        path = (root / relative).resolve()
-        if not path.is_relative_to(root) or not path.exists() or not path.is_file():
-            raise UnsafePathError("file is outside workspace or missing")
-        return path
+    def _files(self, root: Path) -> RepositoryFiles:
+        return RepositoryFiles(
+            root, self._settings.max_file_bytes, workspace_root=self._workspace_root
+        )
 
     def _assert_under_workspace(self, path: Path) -> None:
         if not path.is_relative_to(self._workspace_root):
@@ -465,15 +451,14 @@ class GitRepositoryAdapter:
         text = (result.stderr or result.stdout).strip().splitlines()
         return text[-1][:500] if text else fallback
 
-    @staticmethod
-    def _count_shell_true(root: Path) -> int:
+    def _count_shell_true(self, root: Path) -> int:
         count = 0
-        for path in root.rglob("*.py"):
-            if any(part in IGNORED_PARTS for part in path.relative_to(root).parts):
+        for item in self._files(root).iter_files():
+            if Path(item.relative).suffix != ".py":
                 continue
             try:
-                tree = ast.parse(path.read_text())
-            except (SyntaxError, UnicodeDecodeError, OSError):
+                tree = ast.parse(item.content)
+            except SyntaxError:
                 continue
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):

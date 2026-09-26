@@ -18,6 +18,10 @@ All endpoints are under `/api/v1`.
 - `GET /runs/{id}/files/content?path=...&revision=working|base` — path-validated text
   file content. `revision=base` returns the file as it was before any patch was applied,
   read from the workspace's `HEAD` commit; it is the left-hand side of the dashboard diff.
+  Both revisions reject unsafe paths with HTTP 400: symlinks (including parent
+  directories), hidden/ignored paths, special files, binary/non-UTF-8 content and files
+  above `OROD_MAX_FILE_BYTES`. The base blob's mode and size are also checked before
+  reading it. Inventory and dependency discovery omit files rejected by the same policy.
 - `GET /runs/{id}/findings` — normalized security findings.
 - `GET /runs/{id}/patch` — patch and validation report.
 - `GET /runs/{id}/pull-request` — draft pull-request result.

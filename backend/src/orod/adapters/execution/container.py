@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from orod.adapters.execution.subprocess import SafeCommandRunner
+from orod.adapters.repository.files import RepositoryFiles
 from orod.config import Settings
 from orod.domain.errors import CommandRejectedError, UnsafePathError
 from orod.domain.models import CommandResult
@@ -21,7 +22,6 @@ VALIDATION_ARGS = (
     ("-m", "bandit", "-r", ".", "-f", "json", "-lll"),
     ("-m", "pytest", "-q"),
 )
-EXCLUDED = {"venv", "node_modules", "__pycache__", "id_rsa", "id_ed25519"}
 
 
 class ContainerCommandRunner:
@@ -46,7 +46,7 @@ class ContainerCommandRunner:
             raise CommandRejectedError("unsupported container validation command")
         if input_text is not None:
             raise CommandRejectedError("container validation does not accept stdin")
-        root = cwd.resolve()
+        root = Path(os.path.abspath(cwd))
         if not root.is_relative_to(self._root) or root == self._root:
             raise UnsafePathError("validation cwd escaped run workspace")
         name = f"orod-validation-{uuid4().hex}"
@@ -105,29 +105,13 @@ class ContainerCommandRunner:
         """Never mount the original repo, credentials, symlinks or special files."""
         total_bytes = 0
         files = 0
-        for directory, dirs, names in os.walk(root, followlinks=False):
-            base = Path(directory)
-            dirs[:] = [
-                name
-                for name in dirs
-                if not name.startswith(".")
-                and name not in EXCLUDED
-                and not (base / name).is_symlink()
-            ]
-            for name in names:
-                path = base / name
-                if name.startswith(".") or name in EXCLUDED or path.is_symlink():
-                    continue
-                if not path.is_file() or not path.resolve().is_relative_to(root):
-                    continue
-                size = path.stat().st_size
-                if size > self._settings.max_file_bytes:
-                    raise CommandRejectedError("validation input contains an oversized file")
-                total_bytes += size
-                files += 1
-                if total_bytes > 100_000_000 or files > 2_000:
-                    raise CommandRejectedError("validation input exceeds workspace limits")
-                target = destination / path.relative_to(root)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(path, target)
-                target.chmod(0o644)
+        reader = RepositoryFiles(root, self._settings.max_file_bytes, workspace_root=self._root)
+        for item in reader.iter_files():
+            total_bytes += item.size
+            files += 1
+            if total_bytes > 100_000_000 or files > 2_000:
+                raise CommandRejectedError("validation input exceeds workspace limits")
+            target = destination / item.relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(item.content.encode("utf-8"))
+            target.chmod(0o644)
