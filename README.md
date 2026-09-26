@@ -33,7 +33,7 @@ Metric definitions, corpus design and the steps for adding a new case are in
 ## Quick start
 
 Requirements: macOS/Linux, Python 3.12, `uv`, Node.js 22+, Ollama, Git and
-GitHub CLI.
+GitHub CLI. GitHub repository validation also requires a running local Docker daemon.
 
 ```bash
 cp .env.example .env
@@ -55,6 +55,26 @@ UI: <http://localhost:5173> — API: <http://localhost:8000/docs>
 or GitHub account. For a real GitHub repository and a draft PR, run `gh auth login`
 first, then set `OROD_ENABLE_GITHUB_PUBLISH=true` in `.env`.
 
+Before validating a GitHub repository, build the isolated validation image:
+
+```bash
+make validation-image
+```
+
+In **New scan**, test execution is off by default. Select **I trust this repository
+and allow its tests to run** to enable validation. Consent resets when the repository
+changes or the dialog is closed/submitted; it is also required for demos. Without
+consent, analysis and patch proposals remain available, but validation and publishing
+are blocked.
+
+GitHub validation uses an offline, unprivileged container with resource limits and a
+temporary copy of the repository. Docker/image failures block validation; there is no
+host fallback. The image contains Python, pytest, Ruff and Bandit. Repositories that
+need additional dependencies require an operator-built image set with
+`OROD_VALIDATION_IMAGE`; dependencies are never installed from repository instructions.
+See `docs/decisions/0005-explicit-trust-and-container-validation.md` for the boundary
+and the optional Docker integration test.
+
 Ollama structured-output smoke test:
 
 ```bash
@@ -64,9 +84,12 @@ cd backend
 
 ## Security boundary
 
-The MVP is only for repositories trusted by their owner. Running a repository's tests
-executes that repository's code. OROD never merges or force-pushes automatically, and
-never runs LLM output as a shell command.
+Running a repository's tests executes that repository's code and requires explicit
+consent. GitHub validation runs in Docker; explicitly trusted, server-owned demo
+fixtures run locally. This isolates validation, not the entire application: cloning,
+static analysis, OSV queries and publishing still run on the host. The MVP remains
+limited to repositories the authenticated GitHub user can push to. OROD never merges
+or force-pushes automatically, and never runs LLM output as a shell command.
 
 Architecture and API details live under `docs/`; the working rules for AI agents are
 in `AGENTS.md`.

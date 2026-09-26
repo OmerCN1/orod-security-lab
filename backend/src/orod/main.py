@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from orod import __version__
+from orod.adapters.execution.container import ContainerCommandRunner
 from orod.adapters.execution.subprocess import SafeCommandRunner
 from orod.adapters.github.cli import GitHubCLIPublisher
 from orod.adapters.llm.factory import CachingLLMProviderRegistry
@@ -56,7 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workspace_root=configured.workspace_root,
             default_timeout_seconds=configured.command_timeout_seconds,
         )
-        repository = GitRepositoryAdapter(configured, runner)
+        repository = GitRepositoryAdapter(
+            configured, runner, validation_runner=ContainerCommandRunner(configured)
+        )
         vector_store = ChromaAdvisoryStore(
             configured.chroma_path,
             configured.ollama_base_url,

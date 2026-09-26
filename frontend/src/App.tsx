@@ -67,10 +67,10 @@ export default function App() {
   ).length
   const working = roster.find((snapshot) => snapshot.state === 'working')
 
-  const handleStart = (target: string, model: string | null) => {
+  const handleStart = (target: string, model: string | null, trusted: boolean) => {
     setScanOpen(false)
     setSelectedAgent('architect')
-    void start(target, model)
+    void start(target, model, trusted)
   }
   const handleDecide = (decision: ReviewDecision, feedback?: string) => {
     void review(decision, feedback)

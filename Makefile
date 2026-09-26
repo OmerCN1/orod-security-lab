@@ -1,4 +1,4 @@
-.PHONY: install dev backend frontend test lint format eval eval-list eval-publish
+.PHONY: install dev backend frontend test lint format eval eval-list eval-publish validation-image
 
 install:
 	cd backend && uv sync
@@ -18,7 +18,7 @@ test:
 	cd frontend && npm test -- --run
 
 lint:
-	cd backend && uv run ruff check src tests evals ../scripts/verify_ollama.py && uv run mypy src evals
+	cd backend && uv run ruff check src tests evals containers ../scripts/verify_ollama.py && uv run mypy src evals
 	cd frontend && npm run lint
 
 format:
@@ -37,3 +37,6 @@ eval-list:
 
 eval-publish:
 	cd backend && uv run python -m evals run $(MODELS) $(EVAL_ARGS) --publish
+
+validation-image:
+	docker build -t orod-validation:local backend/containers/validation

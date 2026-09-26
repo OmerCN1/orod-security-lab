@@ -10,11 +10,30 @@ integrity of generated patches, and the developer's machine.
 - Prompt injection in repository files: repository text is delimited and
   labelled untrusted; it cannot select tools or commands.
 - Arbitrary command execution: command adapters accept argv arrays and an
-  allowlist, never shell strings.
+  allowlist, never shell strings. Bandit analysis uses Python isolated mode to avoid
+  importing a repository-provided `bandit.py` before test consent.
+- Patch scope: parse all file headers and hunk boundaries, require an exact match
+  to `changed_files`, and reject renames, adds/deletes, mode changes, binary targets,
+  hidden paths and symlink components before invoking `git apply`.
 - Path traversal/symlink escape: all paths are resolved under a run root and
   symlinks are excluded.
 - Destructive Git operations: merge, reset, clean, and force-push are absent.
 - Secret leakage: structured events contain summaries, not environments,
   credentials, or arbitrary file contents.
-- Malicious project tests: MVP is restricted to user-trusted repositories;
-  container or microVM isolation is required before scanning arbitrary repos.
+- Malicious project tests: explicit per-run trust is required, including for demos.
+  GitHub validation uses an unprivileged, offline container with read-only root/input,
+  writable size-limited tmpfs, dropped capabilities, process/CPU/memory limits and a
+  deadline. Only a filtered temporary copy is mounted, never the original workspace,
+  host home, Git metadata or Docker socket. Timeout/cancellation removes the container;
+  output is drained with bounded tails and container logging is disabled.
+  Missing Docker/image support blocks validation instead of executing on the host.
+  Server-owned demo fixtures remain local after explicit consent.
+
+## Remaining boundary
+
+Container isolation covers validation only. Host-side cloning, static parsers, network
+scanners and dependency discovery still handle untrusted repository data. This is not
+a claim that arbitrary hostile repositories are fully sandboxed, and push-permission
+restrictions remain in place. Containers share the daemon host kernel; use a dedicated
+Docker VM/host for stronger isolation. Additional project dependencies belong in an
+operator-maintained image; no repository-controlled installation commands run.

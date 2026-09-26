@@ -8,6 +8,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+from orod.adapters.repository.patches import patch_targets
 from orod.config import Settings
 from orod.domain.errors import InvalidRepositoryError, PatchRejectedError, UnsafePathError
 from orod.domain.models import (
@@ -41,10 +42,16 @@ SECRET_NAMES = {".env", ".env.local", "id_rsa", "id_ed25519", ".npmrc", ".pypirc
 
 
 class GitRepositoryAdapter:
-    def __init__(self, settings: Settings, runner: CommandRunner) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        runner: CommandRunner,
+        validation_runner: CommandRunner | None = None,
+    ) -> None:
         self._settings = settings
         self._runner = runner
         self._workspace_root = settings.workspace_root.expanduser().resolve()
+        self._validation_runner = validation_runner
 
     async def prepare(
         self,
@@ -67,7 +74,6 @@ class GitRepositoryAdapter:
             permission = "LOCAL"
             owner_repo = f"demo/{slug}"
             branch = base_branch or "main"
-            trusted = True
         else:
             match = GITHUB_REPO_RE.fullmatch(repository_url)
             if match is None:
@@ -206,12 +212,29 @@ class GitRepositoryAdapter:
         if (root / "tests").exists():
             checks.append([sys.executable, "-m", "pytest", "-q"])
 
+        # Only server-owned fixtures may execute locally, and still require explicit trust.
+        local_fixture = snapshot.permission == "LOCAL" and bool(
+            DEMO_REPOSITORY_RE.fullmatch(snapshot.repository_url)
+        )
+        runner = self._runner if local_fixture else self._validation_runner
+        if runner is None:
+            return ValidationResult(passed=False, summary="Isolated validation is not configured.")
         for argv in checks:
-            result = await self._runner.run(argv, root)
+            result = await runner.run(argv, root)
             commands.append(result)
+            if result.return_code != 0 or result.timed_out:
+                break
+
+        if not local_fixture and commands[-1].return_code == 125:
+            return ValidationResult(
+                passed=False,
+                commands=commands,
+                summary="Container validation unavailable. Start Docker and build its image.",
+            )
 
         residual_shell_true = self._count_shell_true(root)
-        passed = all(item.return_code == 0 for item in commands) and residual_shell_true == 0
+        passed = all(item.return_code == 0 and not item.timed_out for item in commands)
+        passed = passed and residual_shell_true == 0
         return ValidationResult(
             passed=passed,
             commands=commands,
@@ -391,23 +414,43 @@ class GitRepositoryAdapter:
     def _validate_patch(self, root: Path, patch: PatchProposal) -> None:
         if len(patch.unified_diff.splitlines()) > self._settings.max_diff_lines:
             raise PatchRejectedError("patch exceeds configured line limit")
+        if len(patch.unified_diff.encode("utf-8")) > self._settings.max_file_bytes:
+            raise PatchRejectedError("patch exceeds configured byte limit")
         if not patch.changed_files:
             raise PatchRejectedError("patch has no changed files")
+        targets = patch_targets(patch.unified_diff)
+        if len(set(patch.changed_files)) != len(patch.changed_files):
+            raise PatchRejectedError("duplicate declared patch target")
+        if targets != set(patch.changed_files):
+            raise PatchRejectedError("diff targets do not match changed_files")
         for relative in patch.changed_files:
-            path = self._safe_file(root, relative)
-            if path.name in SECRET_NAMES or path.is_symlink():
+            try:
+                path = self._safe_file(root, relative)
+            except UnsafePathError as exc:
+                raise PatchRejectedError("unsafe patch target") from exc
+            if path.name in SECRET_NAMES or any(
+                part.startswith(".") for part in Path(relative).parts
+            ):
                 raise PatchRejectedError(f"unsafe patch target: {relative}")
             if path.suffix not in {".py", ".toml", ".txt", ".lock"}:
                 raise PatchRejectedError(f"unsupported patch target: {relative}")
-            if (
-                f"a/{relative}" not in patch.unified_diff
-                or f"b/{relative}" not in patch.unified_diff
-            ):
-                raise PatchRejectedError(f"diff header missing for {relative}")
+            if path.stat().st_size > self._settings.max_file_bytes:
+                raise PatchRejectedError("patch target exceeds configured byte limit")
+            try:
+                content = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError) as exc:
+                raise PatchRejectedError("patch target is not readable text") from exc
+            if "\x00" in content:
+                raise PatchRejectedError("binary patch target")
 
     def _safe_file(self, root: Path, relative: str) -> Path:
         if Path(relative).is_absolute() or ".." in Path(relative).parts:
             raise UnsafePathError("unsafe relative path")
+        candidate = root
+        for part in Path(relative).parts:
+            candidate = candidate / part
+            if candidate.is_symlink():
+                raise UnsafePathError("symlink file or parent directory")
         path = (root / relative).resolve()
         if not path.is_relative_to(root) or not path.exists() or not path.is_file():
             raise UnsafePathError("file is outside workspace or missing")

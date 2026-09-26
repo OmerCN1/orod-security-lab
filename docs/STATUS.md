@@ -6,6 +6,22 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Strict unified-diff target parsing now requires an exact match with `changed_files`.
+  Hidden files, symlink components, binary/oversized files, renames, adds/deletes,
+  mode changes and ambiguous metadata are rejected before any patch is applied.
+- Test consent defaults to false in the dashboard and is forwarded through the API;
+  changing the target, closing or submitting the dialog clears consent. Demo preparation
+  no longer implicitly grants trust. Missing consent blocks validation and PR approval.
+- GitHub validation now uses an injected Docker runner with no host fallback. It uses
+  an offline non-root container, read-only root/input, private tmpfs, resource limits,
+  filtered temporary source copies and cleanup on timeout/cancellation (ADR 0005).
+  `make validation-image` builds the operator-controlled image. Server-owned fixtures
+  still run locally only with explicit consent.
+- Built the validation image and passed the live Docker integration test: non-root
+  execution, no effective capabilities, blocked outgoing connections, excluded hidden
+  files, read-only image paths, all four validation commands and no host cache writes.
+- Bandit uses Python isolated mode during scanning; subprocess output is bounded while
+  draining, and timeout/cancellation reaps the process group.
 - Git repository, monorepo, locked Python/Node environments, `AGENTS.md`, and ADRs.
 - FastAPI REST API, persisted SSE event log, reconnect support, cancellation, and health checks.
 - LangGraph Architect -> Security -> Developer flow with SQLite checkpoints.
@@ -99,10 +115,16 @@ Phase 9 — Agent-centred dashboard
   or AST-level edits) and re-run `make eval` to measure the before/after. The corpus makes
   this a measurement rather than a claim.
 - Add a recorded OSV fixture so dependency-advisory remediation joins the corpus.
-- Add container/microVM isolation before accepting arbitrary third-party repositories.
+- Review host-side clone/parsing/scanning boundaries before accepting arbitrary hostile
+  third-party repositories. Validation isolation is implemented and tested; exercise an
+  operator-built dependency image on a representative trusted GitHub repository next.
 
 ## Known Issues
 
+- The default validation image only includes pytest, Ruff and Bandit; projects needing
+  other packages require an operator-maintained image. Hidden config and symlinks are
+  deliberately excluded from its input copy. Isolation covers validation, not the
+  entire host-side analysis pipeline.
 - **`qwen2.5-coder:14b` cannot emit a usable unified diff.** Over the 20-case corpus it
   matched the deterministic baseline exactly (auto-fix 1/16) and contributed nothing: 15 of
   16 fix cases ended with `git apply` rejecting the diff as corrupt, and the one success was
@@ -126,6 +148,15 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Security/trust update: `uv run pytest -q` — 123 passed, 1 opt-in Docker test skipped
+  in the default run. After starting Docker and building the image,
+  `OROD_TEST_CONTAINER=1 uv run --no-sync pytest -q tests/integration/test_container_runtime.py`
+  — 1 passed, including all four real container validation commands.
+- Security/trust update: `npm test -- --run` — 39 passed; frontend lint and build passed.
+- Security/trust update: `make lint` — Ruff, strict mypy (69 source files), frontend ESLint.
+- `make eval EVAL_ARGS='--out /private/tmp/orod-security-review-eval'` — 20/20 cases,
+  unchanged deterministic baseline: F1 1.00, auto-fix 1/16, patch validity 12%, policy 2/2,
+  zero regressions. Published model comparison preserved.
 - `backend/.venv/bin/pytest -q` — 79 passed.
 - `backend/.venv/bin/mypy src evals` — passed, strict mode, 67 files.
 - `backend/.venv/bin/ruff check src tests evals ../scripts/verify_ollama.py` — passed.
@@ -154,7 +185,8 @@ Phase 9 — Agent-centred dashboard
 - OSV package/version matching is authoritative; Chroma is context only.
 - Automatic draft PR only for writable repositories; never auto-merge.
 - Publishing remains disabled by default until explicitly enabled for a trusted target.
-- Trusted repositories only until process isolation is implemented.
+- Explicit test consent for every repository; container-only GitHub validation. The
+  wider host-side analysis pipeline is not yet a sandbox for arbitrary hostile repos.
 - Provider choice follows the configured chat model; `claude-*` selects the Anthropic
   adapter, anything else selects Ollama.
 - Evaluation fixtures are never tuned to improve a result; a gap is fixed in the pipeline

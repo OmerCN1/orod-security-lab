@@ -133,3 +133,22 @@ def test_regeneration_requires_feedback(tmp_path: Path) -> None:
         wait_for_status(client, run_id, "awaiting_review")
         response = client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "regenerate"})
         assert response.status_code == 422
+
+
+def test_omitted_consent_blocks_validation_and_approval_even_for_demo(tmp_path: Path) -> None:
+    with TestClient(create_app(review_settings(tmp_path))) as client:
+        response = client.post("/api/v1/runs", json={"repository_url": "demo://vulnerable-python"})
+        assert response.status_code == 202
+        assert response.json()["trusted"] is False
+        run_id = response.json()["id"]
+        paused = wait_for_status(client, run_id, "awaiting_review")
+        assert paused["repository"]["trusted"] is False
+        assert paused["validation"]["passed"] is False
+        assert paused["validation"]["commands"] == []
+        assert "not explicitly marked trusted" in paused["validation"]["summary"]
+        assert paused["review"]["can_approve"] is False
+        assert paused["pull_request"] is None
+        assert (
+            client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "approve"}).status_code
+            == 422
+        )

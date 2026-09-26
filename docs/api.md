@@ -7,6 +7,10 @@ All endpoints are under `/api/v1`.
 - `POST /runs` — start an analysis; returns HTTP 202. Body accepts
   `repository_url`, optional `base_branch`, `trusted`, and an optional `model`
   identifier that overrides the server default for this run only.
+  `trusted` defaults to `false`: setting it to `true` explicitly authorizes execution
+  of repository tests. This applies to `demo://` fixtures as well as GitHub repositories.
+  GitHub validation always uses an isolated container; consent does not enable host
+  execution. Without consent, validation fails closed and a PR cannot be approved/published.
 - `GET /runs?limit=&offset=` — run history, most recent first, as compact summaries.
 - `GET /runs/{id}` — run status and accumulated artifacts.
 - `GET /runs/{id}/events` — Server-Sent Events stream.

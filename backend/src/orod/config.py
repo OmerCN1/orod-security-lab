@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     max_file_bytes: int = 1_000_000
     max_diff_lines: int = 800
     command_timeout_seconds: int = 120
+    validation_image: str = Field(
+        default="orod-validation:local", pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._/@:-]*$"
+    )
     event_poll_interval_seconds: float = 0.2
 
     def ensure_directories(self) -> None:

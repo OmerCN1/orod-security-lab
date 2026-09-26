@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from orod.domain.errors import CommandRejectedError, UnsafePathError
@@ -51,20 +53,55 @@ class SafeCommandRunner:
             stdin=asyncio.subprocess.PIPE if input_text is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
+        output_limit = max_output_chars or 20_000
+
+        async def read_tail(stream: asyncio.StreamReader | None) -> bytes:
+            assert stream is not None
+            output = bytearray()
+            # Bound memory while draining, rather than truncating an unbounded communicate().
+            byte_limit = output_limit * 4
+            while chunk := await stream.read(65_536):
+                output.extend(chunk)
+                if len(output) > byte_limit:
+                    del output[:-byte_limit]
+            return bytes(output)
+
+        async def write_input() -> None:
+            if process.stdin is not None:
+                with suppress(BrokenPipeError, ConnectionResetError):
+                    process.stdin.write((input_text or "").encode())
+                    await process.stdin.drain()
+                process.stdin.close()
+
+        async def communicate() -> tuple[bytes, bytes]:
+            stdout, stderr, _, _ = await asyncio.gather(
+                read_tail(process.stdout), read_tail(process.stderr), write_input(), process.wait()
+            )
+            return stdout, stderr
+
+        def kill_group() -> None:
+            with suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+
+        communication = asyncio.create_task(communicate())
         timed_out = False
         try:
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(input_text.encode() if input_text is not None else None),
+                asyncio.shield(communication),
                 timeout=timeout_seconds or self._default_timeout,
             )
         except TimeoutError:
             timed_out = True
-            process.kill()
-            stdout, stderr = await process.communicate()
+            kill_group()
+            stdout, stderr = await communication
+        except asyncio.CancelledError:
+            kill_group()
+            await communication
+            raise
 
         duration_ms = int((time.monotonic() - start) * 1000)
-        output_limit = max_output_chars or 20_000
         return CommandResult(
             argv=argv,
             return_code=process.returncode if process.returncode is not None else 124,

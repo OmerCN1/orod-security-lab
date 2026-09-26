@@ -61,10 +61,10 @@ export function listRuns(limit = 25): Promise<RunSummary[]> {
   return request(`/runs?limit=${limit}`)
 }
 
-export function createRun(repositoryUrl: string, model: string | null): Promise<RunRecord> {
+export function createRun(repositoryUrl: string, model: string | null, trusted = false): Promise<RunRecord> {
   return request('/runs', {
     method: 'POST',
-    body: JSON.stringify({ repository_url: repositoryUrl, trusted: true, model }),
+    body: JSON.stringify({ repository_url: repositoryUrl, trusted, model }),
   })
 }
 

@@ -8,7 +8,7 @@ interface UseRun {
   events: RunEvent[]
   error: string | null
   busy: boolean
-  start: (repositoryUrl: string, model: string | null) => Promise<void>
+  start: (repositoryUrl: string, model: string | null, trusted: boolean) => Promise<void>
   open: (runId: string) => Promise<void>
   stop: () => Promise<void>
   review: (decision: ReviewDecision, feedback?: string) => Promise<void>
@@ -107,8 +107,8 @@ export function useRun(): UseRun {
   )
 
   const start = useCallback(
-    (repositoryUrl: string, model: string | null) =>
-      guard(async () => attach(await createRun(repositoryUrl.trim(), model))),
+    (repositoryUrl: string, model: string | null, trusted: boolean) =>
+      guard(async () => attach(await createRun(repositoryUrl.trim(), model, trusted))),
     [attach, guard],
   )
 

@@ -30,7 +30,7 @@ class BanditScanner:
     async def scan(self, snapshot: RepositorySnapshot) -> list[Finding]:
         root = Path(snapshot.workspace_path)
         result = await self._runner.run(
-            [sys.executable, "-m", "bandit", "-r", ".", "-f", "json"],
+            [sys.executable, "-I", "-m", "bandit", "-r", ".", "-f", "json"],
             root,
             max_output_chars=5_000_000,
         )
