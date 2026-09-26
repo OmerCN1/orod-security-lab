@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+from orod.adapters.repository.patches import WORKING_DIFF_ARGV
 from orod.domain.errors import OrodError
 from orod.domain.models import (
     PatchProposal,
@@ -44,6 +45,7 @@ class GitHubCLIPublisher:
                 draft=bool(payload.get("isDraft", True)),
             )
 
+        await self._require_validated_workspace(root, patch)
         commands = [
             ["git", "checkout", "-b", branch],
             ["git", "add", "--", *patch.changed_files],
@@ -86,6 +88,23 @@ class GitHubCLIPublisher:
             number=int(number_match.group(1)) if number_match else None,
             branch=branch,
         )
+
+    async def _require_validated_workspace(self, root: Path, patch: PatchProposal) -> None:
+        """Refuse to commit anything other than the exact diff that was validated.
+
+        Only ``changed_files`` are staged, so a workspace carrying other changes would
+        publish a state that never went through validation.
+        """
+        # One extra character is enough to detect a longer diff; the runner keeps a tail.
+        diff = await self._runner.run(
+            list(WORKING_DIFF_ARGV), root, max_output_chars=len(patch.unified_diff) + 1
+        )
+        if diff.return_code != 0 or diff.timed_out or diff.stdout != patch.unified_diff:
+            raise OrodError("refusing to publish: workspace does not match the validated patch")
+        names = await self._runner.run(["git", "diff", "--name-only", "-z", "--"], root)
+        changed = {name for name in names.stdout.split("\x00") if name}
+        if names.return_code != 0 or changed != set(patch.changed_files):
+            raise OrodError("refusing to publish: changed files do not match the validated patch")
 
     @staticmethod
     def _pull_request_body(patch: PatchProposal, validation: ValidationResult, run_id: str) -> str:

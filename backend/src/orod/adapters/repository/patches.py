@@ -10,6 +10,20 @@ from orod.domain.errors import PatchRejectedError
 HUNK = re.compile(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@(?: .*)?")
 INDEX = re.compile(r"index [0-9a-f]+\.\.[0-9a-f]+(?: 100(?:644|755))?")
 
+# The workspace diff is stored, reverted and compared before publishing, so its format
+# must not depend on the operator's Git configuration (colour, prefixes, external or
+# textconv drivers).
+WORKING_DIFF_ARGV = (
+    "git",
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-textconv",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
+    "--",
+)
+
 
 def patch_targets(diff: str) -> set[str]:
     """Reject ambiguous headers, metadata operations and malformed/trailing content.

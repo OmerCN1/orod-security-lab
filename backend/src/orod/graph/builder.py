@@ -203,6 +203,21 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             f"Patch generation attempt {attempt} started",
         )
         snapshot = RepositorySnapshot.model_validate(state["repository_summary"])
+        previous_patch = state.get("patch")
+        if previous_patch is not None:
+            # Every attempt starts from the base revision. Stacking attempts would
+            # validate and show their union while publishing only the latest one.
+            await services.repository.revert_patch(
+                snapshot, str(previous_patch.get("unified_diff") or "")
+            )
+            await mutate_run(state, patch=None)
+            await emit(
+                state,
+                "developer",
+                EventType.PATCH,
+                f"Previous patch reverted; attempt {attempt} starts from the base revision",
+                payload={"attempt": attempt, "reverted": True},
+            )
         findings = [Finding.model_validate(value) for value in state.get("findings", [])]
         selected = set(state.get("selected_finding_ids", []))
         chosen = [item for item in findings if item.id in selected]

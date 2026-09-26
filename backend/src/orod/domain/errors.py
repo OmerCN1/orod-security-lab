@@ -32,3 +32,7 @@ class ReviewNotPendingError(OrodError):
 
 class ReviewNotAllowedError(OrodError):
     """A review decision would violate a publishing invariant."""
+
+
+class WorkspaceIntegrityError(OrodError):
+    """The run workspace no longer matches the changes OROD itself applied."""

@@ -10,9 +10,14 @@ from itertools import islice
 from pathlib import Path
 
 from orod.adapters.repository.files import RepositoryFiles
-from orod.adapters.repository.patches import patch_targets
+from orod.adapters.repository.patches import WORKING_DIFF_ARGV, patch_targets
 from orod.config import Settings
-from orod.domain.errors import InvalidRepositoryError, PatchRejectedError, UnsafePathError
+from orod.domain.errors import (
+    InvalidRepositoryError,
+    PatchRejectedError,
+    UnsafePathError,
+    WorkspaceIntegrityError,
+)
 from orod.domain.models import (
     DEMO_REPOSITORY_RE,
     CommandResult,
@@ -185,8 +190,16 @@ class GitRepositoryAdapter:
         return output
 
     async def apply_patch(self, snapshot: RepositorySnapshot, patch: PatchProposal) -> str:
+        """Apply a patch to a workspace that is still at its base revision.
+
+        Starting from the base is what makes the returned diff equal to this proposal
+        alone; a leftover earlier attempt would otherwise be validated and shown but not
+        published with it.
+        """
         root = Path(snapshot.workspace_path)
         self._validate_patch(root, patch)
+        if await self._working_diff(root):
+            raise WorkspaceIntegrityError("workspace already carries changes before a new patch")
         check = await self._runner.run(
             ["git", "apply", "--check", "-"], root, input_text=patch.unified_diff
         )
@@ -197,10 +210,41 @@ class GitRepositoryAdapter:
         )
         if apply_result.return_code != 0:
             raise PatchRejectedError(self._safe_error(apply_result, "patch application failed"))
-        diff = await self._runner.run(["git", "diff", "--"], root)
-        if not diff.stdout.strip():
+        diff = await self._working_diff(root)
+        if not diff.strip():
             raise PatchRejectedError("patch produced no repository changes")
-        return diff.stdout
+        return diff
+
+    async def revert_patch(self, snapshot: RepositorySnapshot, applied_diff: str) -> None:
+        """Return the workspace to its base revision by reversing a patch OROD applied.
+
+        Only the exact diff recorded at apply time is reversed; anything else in the
+        working tree is an integrity failure rather than something to clean up. A
+        workspace that is already clean is left alone, so a re-executed graph node can
+        call this again safely.
+        """
+        root = Path(snapshot.workspace_path)
+        current = await self._working_diff(root)
+        if not current:
+            return
+        if current != applied_diff:
+            raise WorkspaceIntegrityError("workspace changed after the patch was applied")
+        for argv in (["git", "apply", "-R", "--check", "-"], ["git", "apply", "-R", "-"]):
+            result = await self._runner.run(argv, root, input_text=applied_diff)
+            if result.return_code != 0 or result.timed_out:
+                raise WorkspaceIntegrityError(self._safe_error(result, "patch revert failed"))
+        if await self._working_diff(root):
+            raise WorkspaceIntegrityError("workspace still differs from its base after revert")
+
+    async def _working_diff(self, root: Path) -> str:
+        limit = self._settings.max_file_bytes
+        result = await self._runner.run(list(WORKING_DIFF_ARGV), root, max_output_chars=limit + 1)
+        if result.return_code != 0 or result.timed_out:
+            raise WorkspaceIntegrityError(self._safe_error(result, "workspace diff failed"))
+        # The runner keeps the tail of oversized output; never treat a tail as the diff.
+        if len(result.stdout) > limit:
+            raise WorkspaceIntegrityError("workspace diff exceeds configured byte limit")
+        return result.stdout
 
     async def validate(self, snapshot: RepositorySnapshot) -> ValidationResult:
         root = Path(snapshot.workspace_path)

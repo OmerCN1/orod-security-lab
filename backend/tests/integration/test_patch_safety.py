@@ -5,7 +5,7 @@ import pytest
 from orod.adapters.execution.subprocess import SafeCommandRunner
 from orod.adapters.repository.git import GitRepositoryAdapter
 from orod.config import Settings
-from orod.domain.errors import PatchRejectedError
+from orod.domain.errors import PatchRejectedError, WorkspaceIntegrityError
 from orod.domain.models import PatchProposal, RepositorySnapshot
 
 
@@ -38,6 +38,25 @@ async def repository(tmp_path: Path) -> tuple[GitRepositoryAdapter, RepositorySn
     adapter = GitRepositoryAdapter(Settings(workspace_root=tmp_path), runner)
     snapshot = RepositorySnapshot(repository_url="demo://test", workspace_path=str(root))
     return adapter, snapshot, root
+
+
+async def commit_baseline(root: Path) -> None:
+    """Record test setup as the base revision; patches must start from a clean base."""
+    runner = SafeCommandRunner({"git"}, root.parent)
+    for argv in (
+        ["git", "add", "."],
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "setup",
+        ],
+    ):
+        assert (await runner.run(argv, root)).return_code == 0
 
 
 def proposal(diff: str, paths: list[str]) -> PatchProposal:
@@ -139,6 +158,7 @@ async def test_header_like_source_lines_are_hunk_data(
 ) -> None:
     adapter, snapshot, root = repository
     (root / "app.py").write_text("-- a/.env\n")
+    await commit_baseline(root)
     await adapter.apply_patch(
         snapshot, proposal(edit("app.py", "-- a/.env", "++ b/.env"), ["app.py"])
     )
@@ -150,6 +170,7 @@ async def test_normal_git_headers_and_missing_final_source_newline(
 ) -> None:
     adapter, snapshot, root = repository
     (root / "app.py").write_text("value = 1")
+    await commit_baseline(root)
     diff = (
         "diff --git a/app.py b/app.py\nindex 1234567..abcdef0 100644\n"
         "--- a/app.py\n+++ b/app.py\n@@ -1 +1 @@\n-value = 1\n"
@@ -175,3 +196,48 @@ async def test_rejects_oversized_patch_or_target(
     with pytest.raises(PatchRejectedError, match="limit"):
         await adapter.apply_patch(snapshot, proposal(edit("app.py"), ["app.py"]))
     assert (root / "app.py").read_text().startswith("value = 1")
+
+
+async def test_a_second_attempt_starts_from_the_base_revision(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    first = await adapter.apply_patch(snapshot, proposal(edit("app.py"), ["app.py"]))
+    await adapter.revert_patch(snapshot, first)
+    assert (root / "app.py").read_text() == "value = 1\n"
+
+    second = await adapter.apply_patch(snapshot, proposal(edit("other.py"), ["other.py"]))
+    # The stored diff is this attempt alone, so it matches what would be published.
+    assert "other.py" in second and "app.py" not in second
+
+
+async def test_a_patch_cannot_stack_on_an_earlier_one(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    await adapter.apply_patch(snapshot, proposal(edit("app.py"), ["app.py"]))
+    with pytest.raises(WorkspaceIntegrityError, match="already carries changes"):
+        await adapter.apply_patch(snapshot, proposal(edit("other.py"), ["other.py"]))
+    assert (root / "other.py").read_text() == "value = 1\n"
+
+
+async def test_revert_is_a_no_op_on_a_clean_workspace(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    applied = await adapter.apply_patch(snapshot, proposal(edit("app.py"), ["app.py"]))
+    await adapter.revert_patch(snapshot, applied)
+    # A re-executed node reverts again; the workspace is already at its base.
+    await adapter.revert_patch(snapshot, applied)
+    assert (root / "app.py").read_text() == "value = 1\n"
+
+
+async def test_revert_refuses_a_workspace_that_changed_after_the_patch(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    applied = await adapter.apply_patch(snapshot, proposal(edit("app.py"), ["app.py"]))
+    (root / "other.py").write_text("value = 3\n")
+    with pytest.raises(WorkspaceIntegrityError, match="changed after the patch"):
+        await adapter.revert_patch(snapshot, applied)
+    assert (root / "app.py").read_text() == "value = 2\n"

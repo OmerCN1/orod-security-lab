@@ -111,6 +111,18 @@ def test_regeneration_returns_to_the_developer_and_asks_again(tmp_path: Path) ->
 
         assert payload["status"] == "awaiting_review", payload
         assert payload["review"]["revision_count"] == 1
+        # The regenerated patch starts from the base revision rather than stacking on the
+        # first one, so it is a complete, approvable patch of its own - the same one here,
+        # because the offline provider is deterministic.
+        assert payload["review"]["can_approve"] is True, payload["validation"]
+        assert payload["review"]["changed_files"] == ["app.py"]
+        assert payload["patch"]["unified_diff"] == first["patch"]["unified_diff"]
+
+        # The event stream stays open while a run is paused, so finish the run first.
+        client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "reject"})
+        wait_for_status(client, run_id, "completed")
+        events = client.get(f"/api/v1/runs/{run_id}/events", headers={"Last-Event-ID": "0"}).text
+        assert "Previous patch reverted" in events
 
 
 def test_review_endpoint_rejects_decisions_for_runs_that_are_not_paused(tmp_path: Path) -> None:
