@@ -317,6 +317,9 @@ class AdvisorySyncResult(BaseModel):
     matched_advisories: int
     cached_advisories: int
     errors: list[str] = Field(default_factory=list)
+    # False when any OSV lookup failed, so the findings may be incomplete. Cache
+    # failures do not count: they never hide a package/version match.
+    complete: bool = True
 
 
 class ModelOption(BaseModel):

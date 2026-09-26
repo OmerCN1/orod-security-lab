@@ -4,7 +4,7 @@ import asyncio
 import shutil
 import sys
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,12 +22,14 @@ from evals.metrics import (
     score_detection,
     score_outcome,
 )
+from orod.application.finding_regressions import introduced_high_risk
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
 from orod.domain.findings import deduplicate_findings
-from orod.domain.models import Finding, RunCreate, RunRecord
+from orod.domain.models import Finding, FindingSource, RunCreate, RunRecord
 from orod.main import create_app
 from orod.ports.llm import LLMProvider
+from orod.ports.repository import RepositoryProvider
 from orod.ports.scanners import SecurityScanner
 from orod.ports.storage import RunStore
 
@@ -81,6 +83,10 @@ def _llm(app: FastAPI) -> LLMProvider:
     return cast(LLMProvider, app.state.llm)
 
 
+def _repository(app: FastAPI) -> RepositoryProvider:
+    return cast(RepositoryProvider, app.state.repository)
+
+
 def _scanners(app: FastAPI) -> list[SecurityScanner]:
     return cast(list[SecurityScanner], app.state.scanners)
 
@@ -120,10 +126,6 @@ async def _rescan(app: FastAPI, record: RunRecord) -> list[Finding]:
         except Exception as exc:  # a broken rescan must not mask the run's own result
             print(f"  rescan skipped {scanner.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
     return deduplicate_findings(findings)
-
-
-def _count_high(findings: Sequence[Finding]) -> int:
-    return sum(item.severity.value in {"high", "critical"} for item in findings)
 
 
 async def run_case(app: FastAPI, case: EvalCase, timeout_seconds: float) -> CaseResult:
@@ -173,7 +175,13 @@ async def run_case(app: FastAPI, case: EvalCase, timeout_seconds: float) -> Case
         result.residual_target_findings = sorted(
             {item.rule_id for item in case.expected_findings} & remaining
         )
-    result.new_high_findings = max(0, _count_high(post_patch) - _count_high(record.findings))
+    if record.repository is not None:
+        # The rescan runs code scanners only, so compare it with the code findings.
+        before = [item for item in record.findings if item.source != FindingSource.OSV]
+        introduced = await introduced_high_risk(
+            _repository(app), record.repository, before, post_patch, max_chars=1_000_000
+        )
+        result.new_high_findings = len(introduced)
 
     result.llm_usage = llm.usage()
     result.cost_usd = estimate_cost_usd(result.llm_usage)

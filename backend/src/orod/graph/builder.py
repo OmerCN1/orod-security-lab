@@ -7,11 +7,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
 from orod.agents.base import AgentServices
+from orod.application.finding_regressions import introduced_high_risk
 from orod.domain.errors import PatchRejectedError
 from orod.domain.events import EventLevel, EventType, RunEvent
 from orod.domain.findings import deduplicate_findings
 from orod.domain.models import (
     Finding,
+    FindingSource,
     PatchProposal,
     PullRequestResult,
     RepositorySnapshot,
@@ -61,6 +63,22 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             setattr(run, key, value)
         run.updated_at = utc_now()
         await services.store.save_run(run)
+
+    async def rescan_dependencies(
+        snapshot: RepositorySnapshot, original_findings: list[Finding]
+    ) -> tuple[list[Finding], str | None]:
+        """Post-patch OSV findings, plus an error when they cannot be trusted as complete."""
+        current = await services.repository.discover_dependencies(snapshot)
+        if [item.model_dump() for item in current] == [
+            item.model_dump() for item in snapshot.dependencies
+        ]:
+            # Unchanged manifests: the original package/version matches still hold,
+            # and the rescan needs no network access.
+            return [item for item in original_findings if item.source == FindingSource.OSV], None
+        findings, sync = await services.vulnerabilities.scan_dependencies(current)
+        if not sync.complete:
+            return findings, "; ".join(sync.errors[:3]) or "OSV lookup was incomplete"
+        return findings, None
 
     async def architect(state: TeamState) -> dict[str, object]:
         await mutate_run(state, status=RunStatus.RUNNING, phase=RunPhase.ARCHITECT)
@@ -297,10 +315,12 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 original_findings = [
                     Finding.model_validate(value) for value in state.get("findings", [])
                 ]
+                # Dependency remediation is not automated yet, so the residual check
+                # covers code findings only; OSV findings still count as regressions.
                 selected_targets = {
                     (item.source, item.rule_id, item.file_path)
                     for item in original_findings
-                    if item.id in selected_ids
+                    if item.id in selected_ids and item.source != FindingSource.OSV
                 }
                 raw_post_patch: list[Finding] = []
                 scanner_errors: list[str] = []
@@ -311,29 +331,47 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                         scanner_errors.append(f"{scanner.name}: {type(exc).__name__}")
                 # The original findings were deduplicated before being stored, so the
                 # rescan must be too or a rule seen by two scanners looks like a new one.
-                post_patch_findings = deduplicate_findings(raw_post_patch)
+                post_patch_code_findings = deduplicate_findings(raw_post_patch)
+                dependency_findings, dependency_error = await rescan_dependencies(
+                    snapshot, original_findings
+                )
                 residual_targets = {
-                    (item.source, item.rule_id, item.file_path) for item in post_patch_findings
+                    (item.source, item.rule_id, item.file_path) for item in post_patch_code_findings
                 } & selected_targets
-                original_high = sum(
-                    item.severity.value in {"high", "critical"} for item in original_findings
+                # The original findings include OSV, so the rescan must too; otherwise a
+                # vulnerable dependency hides a high finding the patch introduced.
+                introduced = await introduced_high_risk(
+                    services.repository,
+                    snapshot,
+                    original_findings,
+                    [*post_patch_code_findings, *dependency_findings],
+                    max_chars=services.settings.max_file_bytes,
                 )
-                post_patch_high = sum(
-                    item.severity.value in {"high", "critical"} for item in post_patch_findings
-                )
-                result.new_high_findings = max(0, post_patch_high - original_high)
+                result.new_high_findings = len(introduced)
                 if scanner_errors:
                     result.passed = False
                     result.summary = "Post-patch security scan failed: " + ", ".join(scanner_errors)
+                elif dependency_error is not None:
+                    result.passed = False
+                    result.summary = f"Post-patch dependency check failed: {dependency_error}"
                 elif residual_targets:
                     result.passed = False
                     residual_rules = ", ".join(
                         sorted(f"{rule_id} in {path}" for _, rule_id, path in residual_targets)
                     )
                     result.summary = f"Patch did not resolve selected findings: {residual_rules}"
-                elif result.new_high_findings:
+                elif introduced:
                     result.passed = False
-                    result.summary = "Patch introduced new high/critical security findings."
+                    introduced_rules = ", ".join(
+                        sorted(
+                            f"{item.rule_id} in {item.file_path}"
+                            + (f":{item.line}" if item.line else "")
+                            for item in introduced
+                        )
+                    )
+                    result.summary = (
+                        f"Patch introduced new high/critical security findings: {introduced_rules}"
+                    )
         await mutate_run(state, validation=result)
         await emit(
             state,

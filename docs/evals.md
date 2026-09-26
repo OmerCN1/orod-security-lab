@@ -71,7 +71,9 @@ a scanner upgrade that shifts a line does not read as a miss.
 - `patch validity rate` - cases where a generated diff applied cleanly, over cases where
   generation was attempted; this isolates malformed-diff failures from wrong-fix failures
 - `policy` - `manual_review` cases where the pipeline correctly declined to patch
-- `regressions` - cases where the patch introduced a new high or critical finding
+- `regressions` - cases where the patch introduced a new high or critical finding. Findings
+  are matched one-to-one by source, rule, file and the text of the flagged line (not by
+  totals), using the same function as the pipeline's own validation gate
 
 **Cost** - token counts come from the provider's own usage metadata. Locally hosted models
 report `$0.00`; hosted models are priced from the table in `evals/metrics.py`. An

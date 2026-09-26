@@ -34,6 +34,7 @@ class OSVVulnerabilityAdapter:
             )
 
         errors: list[str] = []
+        complete = True
         cached = 0
         findings: list[Finding] = []
         queries = [
@@ -59,8 +60,12 @@ class OSVVulnerabilityAdapter:
                     matched_advisories=0,
                     cached_advisories=0,
                     errors=[f"OSV query failed: {type(exc).__name__}"],
+                    complete=False,
                 )
 
+            if len(results) != len(versioned):
+                errors.append("OSV returned a result count that does not match the query")
+                complete = False
             for dependency, result in zip(versioned, results, strict=False):
                 for match in result.get("vulns", []):
                     advisory_id = str(match.get("id") or "")
@@ -72,6 +77,8 @@ class OSVVulnerabilityAdapter:
                         advisory = detail_response.json()
                     except (httpx.HTTPError, ValueError) as exc:
                         errors.append(f"{advisory_id}: {type(exc).__name__}")
+                        # Without its detail the advisory's severity is only a default.
+                        complete = False
                         advisory = {"id": advisory_id, "summary": "Known vulnerable dependency"}
 
                     findings.append(self._to_finding(dependency, advisory))
@@ -88,6 +95,7 @@ class OSVVulnerabilityAdapter:
             matched_advisories=len(findings),
             cached_advisories=cached,
             errors=errors,
+            complete=complete,
         )
 
     def _to_finding(self, dependency: PackageDependency, advisory: dict[str, Any]) -> Finding:

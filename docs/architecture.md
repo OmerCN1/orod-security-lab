@@ -16,6 +16,14 @@ React --REST/SSE--> FastAPI --> RunCoordinator --> LangGraph Team
 OSV package/version matching is authoritative. Vector similarity is used only
 to select compact advisory context for explanations and remediation prompts.
 
+Every patch attempt - an automatic repair or a reviewer-requested regeneration - starts
+from the workspace's base revision: the previous attempt's recorded diff is reversed
+first, and a patch is refused on a workspace that still carries changes. The stored diff
+is therefore exactly one attempt, and the publisher refuses to commit unless the working
+tree still equals that validated diff. Post-patch validation compares high/critical
+findings with the originals by identity (source, rule, file, flagged line text) across
+code scanners and OSV, so a patch cannot trade one high finding for another (ADR 0007).
+
 Each run uses its UUID as the LangGraph `thread_id`. Application events have a
 monotonic per-run sequence and are persisted separately from graph checkpoints,
 allowing SSE clients to reconnect with `Last-Event-ID`.

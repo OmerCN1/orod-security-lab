@@ -6,6 +6,24 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Every patch attempt now starts from the base revision (ADR 0007). The previous attempt's
+  recorded diff is reversed with `git apply -R` before a repair or regeneration, and a
+  patch is refused on a workspace that still carries changes. Attempts used to stack, so
+  validation and the dashboard saw their union while the publisher staged only the latest
+  proposal's files - a PR could contain a state that was never validated.
+- The publisher refuses to commit unless the working-tree diff equals the validated diff
+  byte for byte and the changed-file set equals `changed_files`. The workspace diff comes
+  from one canonical command that ignores operator Git config and is rejected, not
+  truncated, above `OROD_MAX_FILE_BYTES`.
+- "No new high/critical finding" compares findings one-to-one by source, rule, file and
+  flagged-line text instead of totals, so trading one high finding for another fails.
+  OSV is part of the rescan: unchanged manifests reuse the original matches offline,
+  changed manifests are re-queried, and an incomplete lookup fails validation. The
+  baseline used to include OSV findings the rescan never produced, which masked
+  regressions. The eval regression metric uses the same comparison.
+- A regenerated patch is now a complete patch of its own; before, the offline provider saw
+  its own previous edit and produced nothing to approve.
+
 - Added one `RepositoryFiles` policy for inventory, manifest discovery, source reads,
   patch targets, Python summaries, residual checks, the built-in scanner and container
   copies. Descriptor-relative `O_NOFOLLOW` opens reject symlink files/parents before
@@ -115,6 +133,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
+- Run management: serialize `submit_review` so two concurrent decisions cannot resume the
+  graph twice (the check and `create_task` are separated by an `await`); make `cancel`
+  a no-op for terminal runs; add a concurrent-run limit; reconcile `running` runs left
+  behind by a backend restart.
 - Record the model suites and publish the comparison table:
   `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`.
   Requires a running Ollama with `qwen2.5-coder:14b` pulled and/or `OROD_ANTHROPIC_API_KEY`;
@@ -131,6 +153,11 @@ Phase 9 — Agent-centred dashboard
 
 ## Known Issues
 
+- The post-patch residual check covers code findings only: dependency remediation is not
+  automated, so OSV findings are still "selected" but can never be resolved by a patch.
+  They do count toward the new-high-finding gate.
+- A scanner that was unavailable during the initial scan but works during the rescan
+  makes its findings look new, which fails validation closed.
 - The default validation image only includes pytest, Ruff and Bandit; projects needing
   other packages require an operator-maintained image. Hidden config, symlinks, binary
   and oversized files are deliberately excluded from its input copy. Isolation covers
@@ -158,6 +185,12 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Attempt isolation and identity-based regressions: `uv run --no-sync pytest -q` — 197
+  passed, 1 opt-in Docker test skipped. New tests fail against the previous graph builder.
+- Same change: `ruff check src tests evals containers ../scripts/verify_ollama.py` and
+  strict mypy (71 source files) passed. Frontend code was unchanged.
+- `make eval EVAL_ARGS='--out <scratch>'` — 20/20 cases, unchanged deterministic
+  baseline: F1 1.00, auto-fix 1/16, patch validity 12%, policy 2/2, zero regressions.
 - Shared file policy: `uv run --no-sync pytest -q` — 178 passed, 1 opt-in Docker
   test skipped in the default run. The live Docker test was run separately and passed.
 - Shared file policy: `make lint` — Ruff, strict mypy (70 source files) and frontend

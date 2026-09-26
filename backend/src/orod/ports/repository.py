@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from orod.domain.models import PatchProposal, RepositorySnapshot, ValidationResult
+from orod.domain.models import (
+    PackageDependency,
+    PatchProposal,
+    RepositorySnapshot,
+    ValidationResult,
+)
 
 
 class RepositoryProvider(Protocol):
@@ -25,6 +30,10 @@ class RepositoryProvider(Protocol):
     async def apply_patch(self, snapshot: RepositorySnapshot, patch: PatchProposal) -> str: ...
 
     async def revert_patch(self, snapshot: RepositorySnapshot, applied_diff: str) -> None: ...
+
+    async def discover_dependencies(
+        self, snapshot: RepositorySnapshot
+    ) -> list[PackageDependency]: ...
 
     async def validate(self, snapshot: RepositorySnapshot) -> ValidationResult: ...
 

@@ -236,6 +236,9 @@ class GitRepositoryAdapter:
         if await self._working_diff(root):
             raise WorkspaceIntegrityError("workspace still differs from its base after revert")
 
+    async def discover_dependencies(self, snapshot: RepositorySnapshot) -> list[PackageDependency]:
+        return self._discover_dependencies(Path(snapshot.workspace_path))
+
     async def _working_diff(self, root: Path) -> str:
         limit = self._settings.max_file_bytes
         result = await self._runner.run(list(WORKING_DIFF_ARGV), root, max_output_chars=limit + 1)
