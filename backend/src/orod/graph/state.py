@@ -15,6 +15,9 @@ class TeamState(TypedDict, total=False):
     dependencies: list[dict[str, Any]]
     findings: list[dict[str, Any]]
     selected_finding_ids: list[str]
+    scan_complete: bool
+    failed_scanners: list[str]
+    validation_baseline: dict[str, Any] | None
     patch: dict[str, Any] | None
     validation: dict[str, Any] | None
     pull_request: dict[str, Any] | None

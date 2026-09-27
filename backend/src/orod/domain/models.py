@@ -143,10 +143,52 @@ class CommandResult(BaseModel):
     timed_out: bool = False
 
 
+class ScannerRun(BaseModel):
+    """What one scanner contributed to a run's initial security scan."""
+
+    name: str
+    ok: bool
+    findings: int = 0
+    detail: str = ""
+
+
+class CheckOutcome(BaseModel):
+    """One fixed validation check, reduced to comparable failure identities.
+
+    ``failures`` holds stable identities (failing file, diagnostic, test id) rather than
+    raw output, so the same check on the base revision and on the patched tree can be
+    compared without line numbers.
+    """
+
+    name: str
+    return_code: int
+    timed_out: bool = False
+    failures: list[str] = Field(default_factory=list)
+    passed_tests: int | None = None
+    # False when the tool could not run meaningfully, e.g. pytest collected no tests.
+    ran: bool = True
+    # False when the output could not be interpreted; such a result is never trusted.
+    parsed: bool = True
+
+
+class ValidationBaseline(BaseModel):
+    """The fixed checks as they came out on the base revision, before any patch."""
+
+    checks: list[CheckOutcome] = Field(default_factory=list)
+
+    def check(self, name: str) -> CheckOutcome | None:
+        return next((item for item in self.checks if item.name == name), None)
+
+
 class ValidationResult(BaseModel):
     passed: bool
     commands: list[CommandResult] = Field(default_factory=list)
+    checks: list[CheckOutcome] = Field(default_factory=list)
     new_high_findings: int = 0
+    # Failures that already existed on the base revision and were left unchanged.
+    tolerated_failures: int = 0
+    # None when no test run was attempted; False when pytest ran but executed no tests.
+    tests_ran: bool | None = None
     summary: str = ""
 
 
@@ -227,6 +269,7 @@ class RunMetrics(BaseModel):
     human_revisions: int = 0
     review_decision: str | None = None
     pull_request_created: bool
+    scan_complete: bool = True
 
 
 class RunCreate(BaseModel):
@@ -269,6 +312,10 @@ class RunRecord(BaseModel):
     error: str | None = None
     repository: RepositorySnapshot | None = None
     findings: list[Finding] = Field(default_factory=list)
+    # Per-scanner outcome of the initial scan; empty until the scan has run.
+    scanners: list[ScannerRun] = Field(default_factory=list)
+    # None before scanning; False when any scanner failed, so "no findings" is not clean.
+    scan_complete: bool | None = None
     patch: PatchProposal | None = None
     validation: ValidationResult | None = None
     review: ReviewRequest | None = None
@@ -288,6 +335,7 @@ class RunSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     total_findings: int = 0
+    scan_complete: bool | None = None
     validation_passed: bool | None = None
     pull_request_url: str | None = None
 
@@ -303,6 +351,7 @@ class RunSummary(BaseModel):
             created_at=run.created_at,
             updated_at=run.updated_at,
             total_findings=len(run.findings),
+            scan_complete=run.scan_complete,
             validation_passed=run.validation.passed if run.validation else None,
             pull_request_url=run.pull_request.url if run.pull_request else None,
         )

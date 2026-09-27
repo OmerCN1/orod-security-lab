@@ -6,6 +6,7 @@ from orod.domain.models import (
     PackageDependency,
     PatchProposal,
     RepositorySnapshot,
+    ValidationBaseline,
     ValidationResult,
 )
 
@@ -35,7 +36,13 @@ class RepositoryProvider(Protocol):
         self, snapshot: RepositorySnapshot
     ) -> list[PackageDependency]: ...
 
-    async def validate(self, snapshot: RepositorySnapshot) -> ValidationResult: ...
+    async def record_baseline(
+        self, snapshot: RepositorySnapshot
+    ) -> ValidationBaseline | None: ...
+
+    async def validate(
+        self, snapshot: RepositorySnapshot, baseline: ValidationBaseline | None = None
+    ) -> ValidationResult: ...
 
 
 class PullRequestPublisher(Protocol):

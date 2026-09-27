@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import sys
 from pathlib import Path
@@ -6,10 +7,12 @@ import pytest
 
 from orod.adapters.execution.container import ContainerCommandRunner
 from orod.adapters.repository.git import GitRepositoryAdapter
+from orod.adapters.repository.validation_checks import CHECKS
 from orod.config import Settings
 from orod.domain.errors import CommandRejectedError, UnsafePathError
 from orod.domain.models import CommandResult, RepositorySnapshot, RunCreate
 
+PYTEST_ARGV = [sys.executable, *next(c.args for c in CHECKS if c.name == "pytest")]
 
 class RecordingRunner:
     def __init__(self, *, fail: bool = False, cancel: bool = False) -> None:
@@ -50,7 +53,7 @@ async def test_remote_validation_requires_consent_and_only_uses_container(
     result = await adapter.validate(snapshot)
     assert result.passed is trusted
     assert not host.calls
-    assert len(sandbox.calls) == (4 if trusted else 0)
+    assert len(sandbox.calls) == (len(CHECKS) if trusted else 0)
 
 
 async def test_container_failure_never_falls_back_to_host(tmp_path: Path) -> None:
@@ -120,9 +123,9 @@ async def test_container_has_limits_and_cleans_up_even_on_cancellation(
     runner = ContainerCommandRunner(Settings(workspace_root=tmp_path), host)
     if cancel:
         with pytest.raises(asyncio.CancelledError):
-            await runner.run([sys.executable, "-m", "pytest", "-q"], root)
+            await runner.run(PYTEST_ARGV, root)
     else:
-        assert (await runner.run([sys.executable, "-m", "pytest", "-q"], root)).return_code == 0
+        assert (await runner.run(PYTEST_ARGV, root)).return_code == 0
     command = host.calls[0]
     assert {
         "--network=none",
@@ -151,5 +154,18 @@ async def test_container_rejects_unapproved_commands_and_workspace_escape(tmp_pa
     with pytest.raises(CommandRejectedError):
         await runner.run([sys.executable, "-c", "print('arbitrary')"], root)
     with pytest.raises(UnsafePathError):
-        await runner.run([sys.executable, "-m", "pytest", "-q"], tmp_path)
+        await runner.run(PYTEST_ARGV, tmp_path)
     assert not host.calls
+
+
+def test_image_entrypoint_allows_exactly_the_backend_checks() -> None:
+    """The image keeps its own allowlist; it must not drift from the backend's checks."""
+    entrypoint = Path(__file__).parents[2] / "containers" / "validation" / "entrypoint.py"
+    tree = ast.parse(entrypoint.read_text())
+    allowed = next(
+        node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "ALLOWED" for target in node.targets)
+    )
+    assert ast.literal_eval(allowed) == {check.args for check in CHECKS}

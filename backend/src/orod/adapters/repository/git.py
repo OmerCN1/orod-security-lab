@@ -11,6 +11,13 @@ from pathlib import Path
 
 from orod.adapters.repository.files import RepositoryFiles
 from orod.adapters.repository.patches import WORKING_DIFF_ARGV, patch_targets
+from orod.adapters.repository.validation_checks import (
+    CHECK_OUTPUT_CHARS,
+    CHECKS,
+    interpret,
+    regressions,
+    tolerated,
+)
 from orod.config import Settings
 from orod.domain.errors import (
     InvalidRepositoryError,
@@ -20,11 +27,13 @@ from orod.domain.errors import (
 )
 from orod.domain.models import (
     DEMO_REPOSITORY_RE,
+    CheckOutcome,
     CommandResult,
     FileEntry,
     PackageDependency,
     PatchProposal,
     RepositorySnapshot,
+    ValidationBaseline,
     ValidationResult,
 )
 from orod.ports.execution import CommandRunner
@@ -249,56 +258,109 @@ class GitRepositoryAdapter:
             raise WorkspaceIntegrityError("workspace diff exceeds configured byte limit")
         return result.stdout
 
-    async def validate(self, snapshot: RepositorySnapshot) -> ValidationResult:
+    async def record_baseline(self, snapshot: RepositorySnapshot) -> ValidationBaseline | None:
+        """Run the fixed checks on the untouched base revision.
+
+        Returns ``None`` when validation could not run at all (no consent, no isolated
+        runner, container unavailable); validation then requires every check to pass.
+        """
+        if not snapshot.trusted:
+            return None
         root = Path(snapshot.workspace_path)
+        if await self._working_diff(root):
+            raise WorkspaceIntegrityError("a validation baseline needs the untouched base revision")
+        outcomes = await self._run_checks(snapshot)
+        if outcomes is None:
+            return None
+        return ValidationBaseline(checks=[outcome for _, outcome in outcomes])
+
+    async def validate(
+        self, snapshot: RepositorySnapshot, baseline: ValidationBaseline | None = None
+    ) -> ValidationResult:
+        """Run the fixed checks on the patched tree and compare them with the baseline.
+
+        A check passes when it introduces nothing the base revision did not already have:
+        no newly failing file, diagnostic or test, and no fewer passing tests. Without a
+        baseline every check must pass outright.
+        """
         if not snapshot.trusted:
             return ValidationResult(
                 passed=False,
                 summary="Validation refused: repository was not explicitly marked trusted.",
             )
+        outcomes = await self._run_checks(snapshot)
+        if outcomes is None:
+            runner_missing = self._runner_for(snapshot) is None
+            return ValidationResult(
+                passed=False,
+                summary=(
+                    "Isolated validation is not configured."
+                    if runner_missing
+                    else "Container validation unavailable. Start Docker and build its image."
+                ),
+            )
 
-        commands: list[CommandResult] = []
-        checks = [
-            [sys.executable, "-m", "compileall", "-q", "."],
-            [sys.executable, "-m", "ruff", "check", "--select", "F", "."],
-            [sys.executable, "-m", "bandit", "-r", ".", "-f", "json", "-lll"],
-        ]
-        if (root / "tests").exists():
-            checks.append([sys.executable, "-m", "pytest", "-q"])
+        commands = [command for command, _ in outcomes]
+        checks = [outcome for _, outcome in outcomes]
+        problems: list[str] = []
+        tolerated_count = 0
+        for outcome in checks:
+            previous = baseline.check(outcome.name) if baseline is not None else None
+            problems.extend(f"{outcome.name}: {item}" for item in regressions(previous, outcome))
+            tolerated_count += tolerated(previous, outcome)
+        pytest_outcome = next(item for item in checks if item.name == "pytest")
+        passed = not problems
+        return ValidationResult(
+            passed=passed,
+            commands=commands,
+            checks=checks,
+            tolerated_failures=tolerated_count,
+            tests_ran=pytest_outcome.ran,
+            summary=self._validation_summary(passed, problems, tolerated_count, pytest_outcome),
+        )
 
+    def _runner_for(self, snapshot: RepositorySnapshot) -> CommandRunner | None:
         # Only server-owned fixtures may execute locally, and still require explicit trust.
         local_fixture = snapshot.permission == "LOCAL" and bool(
             DEMO_REPOSITORY_RE.fullmatch(snapshot.repository_url)
         )
-        runner = self._runner if local_fixture else self._validation_runner
+        return self._runner if local_fixture else self._validation_runner
+
+    async def _run_checks(
+        self, snapshot: RepositorySnapshot
+    ) -> list[tuple[CommandResult, CheckOutcome]] | None:
+        """Every fixed check, run independently; ``None`` when they could not run."""
+        runner = self._runner_for(snapshot)
         if runner is None:
-            return ValidationResult(passed=False, summary="Isolated validation is not configured.")
-        for argv in checks:
-            result = await runner.run(argv, root)
-            commands.append(result)
-            if result.return_code != 0 or result.timed_out:
-                break
-
-        if not local_fixture and commands[-1].return_code == 125:
-            return ValidationResult(
-                passed=False,
-                commands=commands,
-                summary="Container validation unavailable. Start Docker and build its image.",
+            return None
+        root = Path(snapshot.workspace_path)
+        outcomes: list[tuple[CommandResult, CheckOutcome]] = []
+        for check in CHECKS:
+            result = await runner.run(
+                [sys.executable, *check.args], root, max_output_chars=CHECK_OUTPUT_CHARS
             )
+            if runner is self._validation_runner and result.return_code == 125:
+                return None
+            outcomes.append((result, interpret(check, result, root)))
+        return outcomes
 
-        residual_shell_true = self._count_shell_true(root)
-        passed = all(item.return_code == 0 and not item.timed_out for item in commands)
-        passed = passed and residual_shell_true == 0
-        return ValidationResult(
-            passed=passed,
-            commands=commands,
-            new_high_findings=residual_shell_true,
-            summary=(
-                "All fixed validation commands passed."
-                if passed
-                else "One or more validation checks failed; no pull request will be opened."
-            ),
-        )
+    @staticmethod
+    def _validation_summary(
+        passed: bool, problems: list[str], tolerated_count: int, pytest_outcome: CheckOutcome
+    ) -> str:
+        if not passed:
+            shown = "; ".join(problems[:5])
+            more = f" (+{len(problems) - 5} more)" if len(problems) > 5 else ""
+            return f"Validation failed: {shown}{more}."
+        parts = ["All fixed validation checks passed."]
+        if tolerated_count:
+            parts = [
+                f"Validation passed; {tolerated_count} pre-existing failure(s) on the base "
+                "revision are unchanged by the patch."
+            ]
+        if not pytest_outcome.ran:
+            parts.append("No tests were collected, so no tests ran.")
+        return " ".join(parts)
 
     async def _github_metadata(self, repository_url: str) -> dict[str, object]:
         result = await self._runner.run(
@@ -497,23 +559,3 @@ class GitRepositoryAdapter:
     def _safe_error(result: CommandResult, fallback: str) -> str:
         text = (result.stderr or result.stdout).strip().splitlines()
         return text[-1][:500] if text else fallback
-
-    def _count_shell_true(self, root: Path) -> int:
-        count = 0
-        for item in self._files(root).iter_files():
-            if Path(item.relative).suffix != ".py":
-                continue
-            try:
-                tree = ast.parse(item.content)
-            except SyntaxError:
-                continue
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Call):
-                    count += sum(
-                        1
-                        for keyword in node.keywords
-                        if keyword.arg == "shell"
-                        and isinstance(keyword.value, ast.Constant)
-                        and keyword.value.value is True
-                    )
-        return count

@@ -40,3 +40,7 @@ class WorkspaceIntegrityError(OrodError):
 
 class RunAlreadyFinishedError(OrodError):
     """An action that needs a live run was requested for a completed or failed run."""
+
+
+class ScanFailedError(OrodError):
+    """No security scanner completed, so the absence of findings means nothing."""

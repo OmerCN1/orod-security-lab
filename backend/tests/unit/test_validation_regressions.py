@@ -3,12 +3,15 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from orod.adapters.persistence.sqlite import SQLiteRunStore
 from orod.agents.base import AgentServices
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
+from orod.domain.errors import ScanFailedError, ScannerOutputError
+from orod.domain.events import EventType, RunEvent
 from orod.domain.models import (
     AdvisorySyncResult,
     Finding,
@@ -73,7 +76,10 @@ class FakeRepository:
     async def discover_dependencies(self, snapshot: object) -> list[PackageDependency]:
         return self.dependencies_after if self.patched else [PINNED]
 
-    async def validate(self, snapshot: object) -> ValidationResult:
+    async def record_baseline(self, snapshot: object) -> None:
+        return None
+
+    async def validate(self, snapshot: object, baseline: object = None) -> ValidationResult:
         return ValidationResult(passed=True, summary="All fixed validation commands passed.")
 
 
@@ -133,6 +139,8 @@ async def run_graph(
     dependencies_after: list[PackageDependency],
     scanner_swaps_rule: bool = True,
     advisories: FakeAdvisories | None = None,
+    extra_scanners: tuple[Any, ...] = (),
+    keep_default_scanner: bool = True,
 ) -> tuple[RunRecord, FakeAdvisories]:
     store = SQLiteRunStore(tmp_path / "orod.sqlite3")
     await store.initialize()
@@ -151,7 +159,7 @@ async def run_graph(
         settings=Settings(require_human_approval=False, enable_github_publish=False),
         store=store,  # type: ignore[arg-type]
         repository=repository,  # type: ignore[arg-type]
-        scanners=[scanner],  # type: ignore[list-item]
+        scanners=[*([scanner] if keep_default_scanner else []), *extra_scanners],
         vulnerabilities=vulnerabilities,
         vector_store=None,  # type: ignore[arg-type]
         llm=FakeProvider(),  # type: ignore[arg-type]
@@ -216,3 +224,61 @@ async def test_a_clean_patch_with_unchanged_dependencies_still_passes(tmp_path: 
     assert record.validation is not None
     assert record.validation.passed is True, record.validation.summary
     assert record.validation.new_high_findings == 0
+
+
+class BrokenScanner:
+    name = "broken"
+
+    async def scan(self, snapshot: object) -> list[Finding]:
+        raise ScannerOutputError("Bandit returned invalid or truncated JSON")
+
+
+async def events_of(tmp_path: Path) -> list[RunEvent]:
+    return await SQLiteRunStore(tmp_path / "orod.sqlite3").list_events("run-1")
+
+
+async def test_a_failed_scanner_marks_the_scan_incomplete(tmp_path: Path) -> None:
+    record, _ = await run_graph(
+        tmp_path,
+        dependencies_after=[PINNED],
+        scanner_swaps_rule=False,
+        extra_scanners=(BrokenScanner(),),
+    )
+
+    assert record.scan_complete is False
+    broken = next(item for item in record.scanners if item.name == "broken")
+    assert broken.ok is False
+    assert "truncated JSON" in broken.detail
+    assert record.metrics is not None and record.metrics.scan_complete is False
+    events = await events_of(tmp_path)
+    failed = next(event for event in events if event.payload.get("scanner") == "broken")
+    # The dashboard lists scanners by this payload; a failure used to carry none.
+    assert failed.payload["ok"] is False
+    assert any("scan was incomplete because broken failed" in event.message for event in events)
+
+
+async def test_a_run_whose_every_scanner_failed_is_not_reported_clean(tmp_path: Path) -> None:
+    with pytest.raises(ScanFailedError, match="No security scanner completed"):
+        await run_graph(
+            tmp_path,
+            dependencies_after=[PINNED],
+            extra_scanners=(BrokenScanner(),),
+            keep_default_scanner=False,
+        )
+
+    record = await SQLiteRunStore(tmp_path / "orod.sqlite3").get_run("run-1")
+    assert record is not None and record.scan_complete is False
+    events = await events_of(tmp_path)
+    # The security agent still closes its lifecycle, so it does not read as in flight.
+    assert any(
+        event.agent == "security" and event.event_type == EventType.AGENT_COMPLETED
+        for event in events
+    )
+
+
+async def test_a_scan_where_every_scanner_worked_is_complete(tmp_path: Path) -> None:
+    record, _ = await run_graph(tmp_path, dependencies_after=[PINNED], scanner_swaps_rule=False)
+
+    assert record.scan_complete is True
+    assert [item.name for item in record.scanners] == ["fake", "osv"]
+    assert all(item.ok for item in record.scanners)

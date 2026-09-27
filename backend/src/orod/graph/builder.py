@@ -8,7 +8,7 @@ from langgraph.types import interrupt
 
 from orod.agents.base import AgentServices
 from orod.application.finding_regressions import introduced_high_risk
-from orod.domain.errors import PatchRejectedError
+from orod.domain.errors import OrodError, PatchRejectedError, ScanFailedError
 from orod.domain.events import EventLevel, EventType, RunEvent
 from orod.domain.findings import deduplicate_findings
 from orod.domain.models import (
@@ -22,6 +22,8 @@ from orod.domain.models import (
     RunMetrics,
     RunPhase,
     RunStatus,
+    ScannerRun,
+    ValidationBaseline,
     ValidationResult,
     utc_now,
 )
@@ -32,6 +34,13 @@ from orod.graph.routing import (
     is_actionable_finding,
 )
 from orod.graph.state import TeamState
+
+
+def scanner_failure_detail(exc: Exception) -> str:
+    """A short, log-safe reason: our own error messages, otherwise only the error type."""
+    if isinstance(exc, OrodError) and str(exc):
+        return f"{type(exc).__name__}: {str(exc)[:200]}"
+    return type(exc).__name__
 
 
 def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
@@ -109,25 +118,51 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
         await emit(state, "security", EventType.AGENT_STARTED, "Security analysis started")
         snapshot = RepositorySnapshot.model_validate(state["repository_summary"])
         findings: list[Finding] = []
+        scanner_runs: list[ScannerRun] = []
         for scanner in services.scanners:
             try:
                 scanner_findings = await scanner.scan(snapshot)
-                findings.extend(scanner_findings)
-                await emit(
-                    state,
-                    "security",
-                    EventType.RUN,
-                    f"{scanner.name} completed with {len(scanner_findings)} finding(s)",
-                    payload={"scanner": scanner.name, "count": len(scanner_findings)},
-                )
             except Exception as exc:
+                detail = scanner_failure_detail(exc)
+                scanner_runs.append(ScannerRun(name=scanner.name, ok=False, detail=detail))
+                # The payload names the scanner, so the dashboard lists a failed scanner
+                # instead of silently counting only the ones that worked.
                 await emit(
                     state,
                     "security",
                     EventType.RUN,
-                    f"{scanner.name} was unavailable: {type(exc).__name__}",
+                    f"{scanner.name} failed: {detail}",
                     level=EventLevel.WARNING,
+                    payload={"scanner": scanner.name, "count": 0, "ok": False, "error": detail},
                 )
+                continue
+            findings.extend(scanner_findings)
+            scanner_runs.append(
+                ScannerRun(name=scanner.name, ok=True, findings=len(scanner_findings))
+            )
+            await emit(
+                state,
+                "security",
+                EventType.RUN,
+                f"{scanner.name} completed with {len(scanner_findings)} finding(s)",
+                payload={"scanner": scanner.name, "count": len(scanner_findings), "ok": True},
+            )
+
+        if scanner_runs and not any(item.ok for item in scanner_runs):
+            # Reporting this as a clean repository would be the one wrong answer.
+            await mutate_run(state, scanners=scanner_runs, scan_complete=False)
+            message = "No security scanner completed: " + ", ".join(
+                f"{item.name} ({item.detail})" for item in scanner_runs
+            )
+            await emit(
+                state,
+                "security",
+                EventType.AGENT_COMPLETED,
+                message,
+                level=EventLevel.ERROR,
+                payload={"scan_complete": False},
+            )
+            raise ScanFailedError(message)
 
         dependency_findings, sync = await services.vulnerabilities.scan_dependencies(
             snapshot.dependencies
@@ -150,10 +185,20 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             payload={
                 "scanner": "osv",
                 "count": len(dependency_findings),
+                "ok": sync.complete,
                 "queried": sync.queried_packages,
                 "errors": sync.errors[:5],
             },
         )
+        scanner_runs.append(
+            ScannerRun(
+                name="osv",
+                ok=sync.complete,
+                findings=len(dependency_findings),
+                detail="" if sync.complete else "; ".join(sync.errors[:2]),
+            )
+        )
+        scan_complete = all(item.ok for item in scanner_runs)
 
         if sync.cached_advisories:
             for finding in findings:
@@ -168,7 +213,9 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                     finding.rag_context = []
 
         final_findings = deduplicate_findings(findings)
-        await mutate_run(state, findings=final_findings)
+        await mutate_run(
+            state, findings=final_findings, scanners=scanner_runs, scan_complete=scan_complete
+        )
         for finding in final_findings[:100]:
             await emit(
                 state,
@@ -181,9 +228,18 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             state,
             "security",
             EventType.AGENT_COMPLETED,
-            f"Security analysis completed with {len(final_findings)} finding(s)",
+            (
+                f"Security analysis completed with {len(final_findings)} finding(s)"
+                if scan_complete
+                else (
+                    f"Security analysis incomplete with {len(final_findings)} finding(s); "
+                    "failed: " + ", ".join(item.name for item in scanner_runs if not item.ok)
+                )
+            ),
+            level=EventLevel.INFO if scan_complete else EventLevel.WARNING,
             payload={
                 "count": len(final_findings),
+                "scan_complete": scan_complete,
                 "osv_queried": sync.queried_packages,
                 "osv_cached": sync.cached_advisories,
                 "osv_errors": sync.errors[:5],
@@ -209,6 +265,8 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             "phase": RunPhase.SECURITY.value,
             "findings": [item.model_dump(mode="json") for item in final_findings],
             "selected_finding_ids": selected,
+            "scan_complete": scan_complete,
+            "failed_scanners": [item.name for item in scanner_runs if not item.ok],
         }
 
     async def developer(state: TeamState) -> dict[str, object]:
@@ -236,6 +294,33 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 f"Previous patch reverted; attempt {attempt} starts from the base revision",
                 payload={"attempt": attempt, "reverted": True},
             )
+        baseline_update: dict[str, object] = {}
+        if "validation_baseline" not in state:
+            # Measured once, on the untouched base revision, so validation can tell a
+            # failure the patch introduced from one the repository already had.
+            baseline = await services.repository.record_baseline(snapshot)
+            baseline_update["validation_baseline"] = (
+                baseline.model_dump(mode="json") if baseline is not None else None
+            )
+            if baseline is not None:
+                existing = sum(len(check.failures) for check in baseline.checks)
+                await emit(
+                    state,
+                    "developer",
+                    EventType.RUN,
+                    f"Validation baseline recorded on the base revision: "
+                    f"{existing} pre-existing failure(s)",
+                    payload={
+                        "baseline": [
+                            {
+                                "check": check.name,
+                                "return_code": check.return_code,
+                                "failures": len(check.failures),
+                            }
+                            for check in baseline.checks
+                        ]
+                    },
+                )
         findings = [Finding.model_validate(value) for value in state.get("findings", [])]
         selected = set(state.get("selected_finding_ids", []))
         chosen = [item for item in findings if item.id in selected]
@@ -258,7 +343,12 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 "No safe automatic patch was produced",
                 level=EventLevel.WARNING,
             )
-            return {"phase": RunPhase.DEVELOPER.value, "patch": None, "attempt": attempt}
+            return {
+                "phase": RunPhase.DEVELOPER.value,
+                "patch": None,
+                "attempt": attempt,
+                **baseline_update,
+            }
 
         try:
             applied_diff = await services.repository.apply_patch(snapshot, proposal)
@@ -277,6 +367,7 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 "patch": None,
                 "attempt": attempt,
                 "errors": errors,
+                **baseline_update,
             }
         proposal.unified_diff = applied_diff
         await mutate_run(state, patch=proposal)
@@ -298,6 +389,7 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             "patch": proposal.model_dump(mode="json"),
             "attempt": attempt,
             "reviewer_feedback": None,
+            **baseline_update,
         }
 
     async def validate(state: TeamState) -> dict[str, object]:
@@ -309,7 +401,9 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             result = ValidationResult(passed=False, summary=summary)
         else:
             snapshot = RepositorySnapshot.model_validate(state["repository_summary"])
-            result = await services.repository.validate(snapshot)
+            baseline_data = state.get("validation_baseline")
+            baseline = ValidationBaseline.model_validate(baseline_data) if baseline_data else None
+            result = await services.repository.validate(snapshot, baseline)
             if result.passed:
                 selected_ids = set(state.get("selected_finding_ids", []))
                 original_findings = [
@@ -515,6 +609,10 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             message = "Run completed; the reviewer rejected the generated patch"
         elif patch_data is not None and validation is not None and not validation.passed:
             message = "Run completed without a pull request because validation failed"
+        scan_complete = bool(state.get("scan_complete", True))
+        if not scan_complete:
+            failed = ", ".join(state.get("failed_scanners", [])) or "a scanner"
+            message += f"; the scan was incomplete because {failed} failed"
         findings = [Finding.model_validate(value) for value in state.get("findings", [])]
         counts: dict[str, int] = {}
         for finding in findings:
@@ -531,6 +629,7 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             human_revisions=int(state.get("revision_count", 0)),
             review_decision=state.get("review_decision"),
             pull_request_created=state.get("pull_request") is not None,
+            scan_complete=scan_complete,
         )
         await mutate_run(
             state,
@@ -538,7 +637,13 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             phase=RunPhase.COMPLETE,
             metrics=metrics,
         )
-        await emit(state, "system", EventType.RUN, message)
+        await emit(
+            state,
+            "system",
+            EventType.RUN,
+            message,
+            level=EventLevel.INFO if scan_complete else EventLevel.WARNING,
+        )
         return {"phase": RunPhase.COMPLETE.value}
 
     graph = StateGraph(TeamState)

@@ -12,6 +12,15 @@ type Tab = 'findings' | 'patch'
  * The tab is deliberately *not* switched when a patch arrives. Moving the view out from
  * under someone mid-read is how the previous build lost their place.
  */
+function failedScanners(run: RunRecord): string {
+  return (
+    run.scanners
+      .filter((item) => !item.ok)
+      .map((item) => item.name)
+      .join(', ') || 'a scanner'
+  )
+}
+
 export function WorkPanel({
   run,
   ownedFindingIds,
@@ -80,11 +89,20 @@ export function WorkPanel({
 
       {tab === 'findings' ? (
         <div>
+          {run.scan_complete === false && (
+            <div className="empty" role="status" style={{ color: 'var(--fail)' }}>
+              Scan incomplete: {failedScanners(run)} failed. Findings from{' '}
+              {run.scanners.filter((item) => !item.ok).length === 1 ? 'it' : 'them'} are missing,
+              so this list is not a complete result.
+            </div>
+          )}
           {run.findings.length === 0 ? (
             <div className="empty">
-              {run.status === 'completed'
-                ? 'Scan completed with no reportable security findings.'
-                : 'Bandit, Semgrep and OSV results merge here.'}
+              {run.scan_complete === false
+                ? 'The scanners that did finish reported nothing.'
+                : run.status === 'completed'
+                  ? 'Scan completed with no reportable security findings.'
+                  : 'Bandit, Semgrep and OSV results merge here.'}
             </div>
           ) : (
             <div className="flex flex-col gap-2 p-3.5">

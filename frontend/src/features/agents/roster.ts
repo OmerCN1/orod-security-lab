@@ -191,12 +191,20 @@ function security({ events, life }: Context): Partial<AgentSnapshot> {
     .filter((event) => str(event.payload, 'scanner') !== null)
     .map((event) => {
       const count = num(event.payload, 'count') ?? 0
+      // A failed scanner reports zero findings too; it must not read as `clean`.
+      const failed = event.payload.ok === false
       return {
-        ok: true,
+        ok: !failed,
         label: str(event.payload, 'scanner') ?? 'scanner',
-        detail: count === 0 ? 'clean' : plural(count, 'finding'),
+        detail: failed
+          ? `failed${str(event.payload, 'error') ? ` — ${str(event.payload, 'error')}` : ''}`
+          : count === 0
+            ? 'clean'
+            : plural(count, 'finding'),
       }
     })
+  const failedScanners = steps.filter((step) => !step.ok).map((step) => step.label)
+  const workedScanners = steps.length - failedScanners.length
 
   const triage = events.find((event) => num(event.payload, 'selected_count') !== null)
   const selected = triage ? num(triage.payload, 'selected_count') : null
@@ -210,6 +218,34 @@ function security({ events, life }: Context): Partial<AgentSnapshot> {
           ? `Ran ${plural(steps.length, 'scanner')} so far…`
           : 'Running bandit, semgrep, osv and the built-in pass…',
       steps,
+    }
+  }
+
+  if (failedScanners.length > 0) {
+    const names = failedScanners.join(', ')
+    return {
+      stateLabel:
+        workedScanners === 0
+          ? 'scan failed'
+          : found.length > 0
+            ? `${plural(found.length, 'finding')} · incomplete`
+            : 'incomplete',
+      headline:
+        workedScanners === 0
+          ? `Every scanner failed (${names}), so nothing is known about this repository.`
+          : `Scan incomplete: ${names} failed. ` +
+            (found.length === 0
+              ? `The other ${plural(workedScanners, 'scanner')} found nothing, which is not the same as clean.`
+              : `The others found ${plural(found.length, 'problem')}` +
+                (high > 0 ? ` — ${high} of them high severity.` : '.')),
+      steps,
+      verdict: {
+        tone: 'bad',
+        title: workedScanners === 0 ? 'No scanner completed' : 'Scan incomplete',
+        detail:
+          `${names} did not finish, so ${failedScanners.length === 1 ? 'its' : 'their'} ` +
+          'findings are missing from this run.',
+      },
     }
   }
 

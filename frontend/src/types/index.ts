@@ -67,10 +67,21 @@ export interface PatchProposal {
   validation_commands: string[][]
 }
 
+export interface ScannerRun {
+  name: string
+  ok: boolean
+  findings: number
+  detail: string
+}
+
 export interface Validation {
   passed: boolean
   summary: string
   new_high_findings: number
+  /** Failures the base revision already had, left unchanged by the patch. */
+  tolerated_failures: number
+  /** `false` when pytest ran but collected no tests; `null` when none was attempted. */
+  tests_ran: boolean | null
   commands: Array<{ argv: string[]; return_code: number; duration_ms: number }>
 }
 
@@ -109,6 +120,7 @@ export interface RunSummary {
   created_at: string
   updated_at: string
   total_findings: number
+  scan_complete: boolean | null
   validation_passed: boolean | null
   pull_request_url: string | null
 }
@@ -126,6 +138,10 @@ export interface RunRecord {
   error: string | null
   repository: RepositorySnapshot | null
   findings: Finding[]
+  /** Per-scanner outcome of the initial scan; empty until it has run. */
+  scanners: ScannerRun[]
+  /** `false` when any scanner failed, so an empty findings list is not a clean result. */
+  scan_complete: boolean | null
   patch: PatchProposal | null
   validation: Validation | null
   review: ReviewRequest | null
@@ -140,6 +156,7 @@ export interface RunRecord {
     human_revisions: number
     review_decision: ReviewDecision | null
     pull_request_created: boolean
+    scan_complete: boolean
   } | null
 }
 

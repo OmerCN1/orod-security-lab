@@ -4,11 +4,11 @@ import shutil
 import subprocess
 import sys
 
+# Mirrors orod.adapters.repository.validation_checks.CHECKS; a backend test keeps them equal.
 ALLOWED = {
-    ("-m", "compileall", "-q", "."),
-    ("-m", "ruff", "check", "--select", "F", "."),
-    ("-m", "bandit", "-r", ".", "-f", "json", "-lll"),
-    ("-m", "pytest", "-q"),
+    ("-m", "compileall", "-q", "--invalidation-mode", "checked-hash", "."),
+    ("-m", "ruff", "check", "--select", "F", "--output-format", "json", "--no-cache", "."),
+    ("-B", "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider"),
 }
 
 if tuple(sys.argv[1:]) not in ALLOWED:

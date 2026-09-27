@@ -42,6 +42,8 @@ function record(partial: Partial<RunRecord> = {}): RunRecord {
     error: null,
     repository: null,
     findings: [],
+    scanners: [],
+    scan_complete: null,
     patch: null,
     validation: null,
     review: null,
@@ -139,6 +141,8 @@ describe('buildRoster', () => {
           passed: false,
           summary: 'One or more validation checks failed.',
           new_high_findings: 0,
+          tolerated_failures: 0,
+          tests_ran: null,
           commands: [
             { argv: ['/venv/bin/python', '-m', 'compileall', '-q', '.'], return_code: 0, duration_ms: 26 },
             { argv: ['/venv/bin/python', '-m', 'pytest', '-q'], return_code: 1, duration_ms: 482 },
@@ -158,13 +162,63 @@ describe('buildRoster', () => {
     expect(validator?.verdict?.tone).toBe('bad')
   })
 
+  it('does not call a scan clean when a scanner failed', () => {
+    const roster = buildRoster(
+      record({ status: 'completed', scan_complete: false }),
+      [
+        event({ agent: 'security', event_type: 'agent_started' }),
+        event({ agent: 'security', payload: { scanner: 'builtin-python', count: 0, ok: true } }),
+        event({
+          agent: 'security',
+          level: 'warning',
+          payload: { scanner: 'bandit', count: 0, ok: false, error: 'ScannerOutputError' },
+        }),
+        event({ agent: 'security', event_type: 'agent_completed', level: 'warning' }),
+      ],
+      false,
+    )
+    const security = roster.find((snapshot) => snapshot.definition.id === 'security')
+    expect(security?.state).toBe('attention')
+    expect(security?.stateLabel).toBe('incomplete')
+    expect(security?.headline).toContain('bandit failed')
+    expect(security?.headline).toContain('not the same as clean')
+    expect(security?.steps.map((step) => [step.label, step.ok])).toEqual([
+      ['builtin-python', true],
+      ['bandit', false],
+    ])
+    expect(security?.verdict?.tone).toBe('bad')
+  })
+
+  it('reports a scan in which every scanner failed as failed', () => {
+    const roster = buildRoster(
+      record({ status: 'failed', scan_complete: false }),
+      [
+        event({ agent: 'security', event_type: 'agent_started' }),
+        event({ agent: 'security', level: 'warning', payload: { scanner: 'bandit', ok: false } }),
+        event({ agent: 'security', event_type: 'agent_completed', level: 'error' }),
+      ],
+      false,
+    )
+    const security = roster.find((snapshot) => snapshot.definition.id === 'security')
+    expect(security?.state).toBe('failed')
+    expect(security?.stateLabel).toBe('scan failed')
+    expect(security?.verdict?.title).toBe('No scanner completed')
+  })
+
   it('ignores the run record for an agent that has not finished in the visible stream', () => {
     // Replay hands back a prefix of the events while the run record stays final. An agent
     // still in flight must report what is known so far, not the eventual answer.
     const roster = buildRoster(
       record({
         status: 'awaiting_review',
-        validation: { passed: false, summary: 'failed', new_high_findings: 0, commands: [] },
+        validation: {
+          passed: false,
+          summary: 'failed',
+          new_high_findings: 0,
+          tolerated_failures: 0,
+          tests_ran: null,
+          commands: [],
+        },
       }),
       [event({ agent: 'validator', event_type: 'agent_started' })],
       true,

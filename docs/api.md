@@ -22,7 +22,10 @@ All endpoints are under `/api/v1`.
   directories), hidden/ignored paths, special files, binary/non-UTF-8 content and files
   above `OROD_MAX_FILE_BYTES`. The base blob's mode and size are also checked before
   reading it. Inventory and dependency discovery omit files rejected by the same policy.
-- `GET /runs/{id}/findings` — normalized security findings.
+- `GET /runs/{id}/findings` — normalized security findings. The run record also carries
+  `scanners` (one `{name, ok, findings, detail}` entry per scanner, OSV included) and
+  `scan_complete`, which is `false` when any scanner failed: an empty findings list is
+  then not a clean result. A run in which every code scanner failed ends `failed`.
 - `GET /runs/{id}/patch` — patch and validation report.
 - `GET /runs/{id}/pull-request` — draft pull-request result.
 - `POST /runs/{id}/review` — submit a human decision; returns HTTP 202.
@@ -65,6 +68,17 @@ for a decision (or one is already being applied), `422` for an invalid submissio
 Decisions are matched to the review round they answer, so concurrent submissions resume
 the graph once: the second receives `409`. A decision that arrives while the run is still
 finishing its pause is held until the pause completes, then applied.
+
+## Validation
+
+Validation runs three fixed checks - `compileall`, Ruff `F` rules and pytest - first on
+the untouched base revision, then on the patched tree. A check passes when the patch adds
+nothing the base revision did not already have: no newly failing file, diagnostic or
+test, and no fewer passing tests. Pre-existing failures are reported in
+`validation.tolerated_failures` instead of blocking every patch. pytest always runs;
+`validation.tests_ran` is `false` when it collected no tests, and the summary says so.
+Output that cannot be interpreted and timeouts always fail. Security regressions are
+judged by the post-patch scan (ADR 0007), not by these checks.
 
 ## Models
 

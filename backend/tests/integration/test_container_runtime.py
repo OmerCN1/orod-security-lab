@@ -9,6 +9,7 @@ import pytest
 from orod.adapters.execution.container import ContainerCommandRunner
 from orod.adapters.execution.subprocess import SafeCommandRunner
 from orod.adapters.repository.git import GitRepositoryAdapter
+from orod.adapters.repository.validation_checks import CHECKS
 from orod.config import Settings
 from orod.domain.models import RepositorySnapshot
 
@@ -35,7 +36,8 @@ def test_isolation():
         assert connection.connect_ex(("1.1.1.1", 443)) != 0
 """)
     runner = ContainerCommandRunner(Settings(workspace_root=tmp_path))
-    result = await runner.run([sys.executable, "-m", "pytest", "-q"], root)
+    pytest_args = next(check.args for check in CHECKS if check.name == "pytest")
+    result = await runner.run([sys.executable, *pytest_args], root)
     assert result.return_code == 0, result.stderr + result.stdout
     assert "1 passed" in result.stdout
     assert not (root / ".pytest_cache").exists()
@@ -51,5 +53,6 @@ def test_isolation():
         )
     )
     assert validation.passed, validation.model_dump()
-    assert len(validation.commands) == 4
+    assert len(validation.commands) == len(CHECKS)
+    assert validation.tests_ran is True
     assert not (root / "tests" / "__pycache__").exists()

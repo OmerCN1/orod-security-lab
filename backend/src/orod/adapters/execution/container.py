@@ -11,17 +11,14 @@ from uuid import uuid4
 
 from orod.adapters.execution.subprocess import SafeCommandRunner
 from orod.adapters.repository.files import RepositoryFiles
+from orod.adapters.repository.validation_checks import CHECKS
 from orod.config import Settings
 from orod.domain.errors import CommandRejectedError, UnsafePathError
 from orod.domain.models import CommandResult
 from orod.ports.execution import CommandRunner
 
-VALIDATION_ARGS = (
-    ("-m", "compileall", "-q", "."),
-    ("-m", "ruff", "check", "--select", "F", "."),
-    ("-m", "bandit", "-r", ".", "-f", "json", "-lll"),
-    ("-m", "pytest", "-q"),
-)
+# The image's entrypoint keeps its own copy of this allowlist; a test keeps them equal.
+VALIDATION_ARGS = frozenset(check.args for check in CHECKS)
 
 
 class ContainerCommandRunner:

@@ -47,13 +47,21 @@ export function RecentRuns({
           onClick={() => onSelect(summary.id)}
           aria-current={summary.id === activeRunId}
           className={`chip ${summary.id === activeRunId ? 'chip-active' : ''}`}
-          title={`${summary.total_findings} findings · ${summary.model ?? 'server default'}`}
+          title={
+            `${summary.total_findings} findings · ${summary.model ?? 'server default'}` +
+            (summary.scan_complete === false ? ' · scan incomplete' : '')
+          }
         >
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ background: DOT[summary.status] }}
           />
           {label(summary)}
+          {summary.scan_complete === false && (
+            <span className="mono text-[10.5px]" style={{ color: 'var(--fail)' }}>
+              incomplete
+            </span>
+          )}
           <span className="mono text-[10.5px]" style={{ color: 'var(--ghost)' }}>
             {when(summary.created_at)}
           </span>

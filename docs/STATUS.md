@@ -6,6 +6,21 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Baseline-aware validation (ADR 0009). compileall, Ruff `F` and pytest run on the base
+  revision before the first attempt and again after each patch; a check fails only when
+  the patch adds a failing file, diagnostic or test, or loses passing tests. Pre-existing
+  failures are counted in `tolerated_failures`. pytest always runs, and "no tests
+  collected" is reported (`tests_ran: false`) instead of passing silently. `bandit -lll`
+  and the repository-wide `shell=True` count left validation; the identity-based
+  post-patch rescan covers them.
+- Running the checks twice exposed stale bytecode: a size-preserving patch applied within
+  a second of the baseline ran unpatched code. compileall now writes hash-checked
+  bytecode and pytest runs with `-B`.
+- A failed scanner is no longer silent. Each scanner's outcome is stored on the run
+  (`scanners`, `scan_complete`), named in its event, and shown in the dashboard's
+  Security card, findings tab and run history as an incomplete scan rather than "all
+  clear". A run in which every code scanner failed ends `failed`.
+
 - Run lifecycle control (ADR 0008). Concurrent review decisions resume the graph once:
   checks and task launch share one coordinator lock, and each decision is tied to the
   review round it answers. A decision that arrives while the pausing task is still
@@ -148,18 +163,13 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
-- Baseline-aware validation: compare compile/Ruff/Bandit/pytest results with the base
-  revision so pre-existing failures do not block every patch, and do not report a pass
-  when no tests ran because there is no `tests/` directory. Separate "a scanner failed"
-  from "no findings" in the run record and the dashboard; today a failed scanner only
-  emits a warning event and a run whose scanners all fail completes as clean.
+- Replace unified-diff generation with structured edit operations (search/replace blocks
+  or AST-level edits) and re-run `make eval` to measure the before/after. The corpus makes
+  this a measurement rather than a claim.
 - Record the model suites and publish the comparison table:
   `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`.
   Requires a running Ollama with `qwen2.5-coder:14b` pulled and/or `OROD_ANTHROPIC_API_KEY`;
   neither was available when the harness was built, so only the baseline row is published.
-- Replace unified-diff generation with structured edit operations (search/replace blocks
-  or AST-level edits) and re-run `make eval` to measure the before/after. The corpus makes
-  this a measurement rather than a claim.
 - Add a recorded OSV fixture so dependency-advisory remediation joins the corpus.
 - Review host-side clone/parsing/scanning boundaries before accepting arbitrary hostile
   third-party repositories. Validation isolation is implemented and tested; exercise an
@@ -169,6 +179,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Known Issues
 
+- The validation image's entrypoint allowlist changed with baseline-aware validation;
+  run `make validation-image` again, or GitHub validation fails closed.
+- A post-patch scanner failure still fails validation even when the same scanner also
+  failed in the initial scan, so a repository scanned with Semgrep offline cannot pass.
 - Run control assumes a single backend process owns the database. Queued runs live in
   memory; after a restart they are failed as interrupted rather than resumed.
 - The post-patch residual check covers code findings only: dependency remediation is not
@@ -203,6 +217,14 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Baseline-aware validation and scan completeness: `uv run --no-sync pytest -q` — 235
+  passed, 1 opt-in Docker test skipped. After `make validation-image`,
+  `OROD_TEST_CONTAINER=1 ... tests/integration/test_container_runtime.py` — 1 passed.
+  The stale-bytecode test fails without the fix. Ruff and strict mypy passed.
+- Same change: `npm test -- --run` — 42 passed; ESLint and `tsc -b --noEmit` passed.
+- `make eval EVAL_ARGS='--out <scratch>'` — unchanged scores (F1 1.00, auto-fix 1/16,
+  patch validity 12%, policy 2/2, zero regressions); median run 0.2 s -> 0.5 s. Only two
+  summaries changed wording; `shell-injection` now names the test its patch breaks.
 - Run lifecycle control: `uv run --no-sync pytest -q` — 212 passed, 1 opt-in Docker test
   skipped, three consecutive runs; the review-flow e2e file passed ten runs in a row.
   New coordinator tests fail against the previous coordinator (9 of 10 before the round
