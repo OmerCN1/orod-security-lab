@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from orod.config import Settings
 from orod.main import create_app
+from tests.api_auth import AUTH_HEADERS
 
 
 def review_settings(tmp_path: Path) -> Settings:
@@ -46,7 +47,7 @@ def start_run(client: TestClient) -> str:
 def test_run_pauses_for_review_and_reject_completes_without_a_pull_request(
     tmp_path: Path,
 ) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         run_id = start_run(client)
         paused = wait_for_status(client, run_id, "awaiting_review")
 
@@ -66,7 +67,7 @@ def test_run_pauses_for_review_and_reject_completes_without_a_pull_request(
 
 
 def test_approval_resumes_the_graph_through_the_publish_node(tmp_path: Path) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         run_id = start_run(client)
         wait_for_status(client, run_id, "awaiting_review")
 
@@ -84,7 +85,7 @@ def test_approval_resumes_the_graph_through_the_publish_node(tmp_path: Path) -> 
 
 
 def test_regeneration_returns_to_the_developer_and_asks_again(tmp_path: Path) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         run_id = start_run(client)
         first = wait_for_status(client, run_id, "awaiting_review")
         assert first["review"]["revision_count"] == 0
@@ -135,7 +136,7 @@ def test_regeneration_returns_to_the_developer_and_asks_again(tmp_path: Path) ->
 
 
 def test_review_endpoint_rejects_decisions_for_runs_that_are_not_paused(tmp_path: Path) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         run_id = start_run(client)
         wait_for_status(client, run_id, "awaiting_review")
         client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "reject"})
@@ -149,7 +150,7 @@ def test_review_endpoint_rejects_decisions_for_runs_that_are_not_paused(tmp_path
 
 
 def test_regeneration_requires_feedback(tmp_path: Path) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         run_id = start_run(client)
         wait_for_status(client, run_id, "awaiting_review")
         response = client.post(f"/api/v1/runs/{run_id}/review", json={"decision": "regenerate"})
@@ -157,7 +158,7 @@ def test_regeneration_requires_feedback(tmp_path: Path) -> None:
 
 
 def test_omitted_consent_blocks_validation_and_approval_even_for_demo(tmp_path: Path) -> None:
-    with TestClient(create_app(review_settings(tmp_path))) as client:
+    with TestClient(create_app(review_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         response = client.post("/api/v1/runs", json={"repository_url": "demo://vulnerable-python"})
         assert response.status_code == 202
         assert response.json()["trusted"] is False

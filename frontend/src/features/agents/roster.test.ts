@@ -162,6 +162,48 @@ describe('buildRoster', () => {
     expect(validator?.verdict?.tone).toBe('bad')
   })
 
+  it('says a repository without Python was not analysed', () => {
+    const roster = buildRoster(
+      record({ status: 'failed' }),
+      [
+        event({ agent: 'architect', event_type: 'agent_started' }),
+        event({
+          agent: 'architect',
+          event_type: 'agent_completed',
+          level: 'error',
+          message: 'No Python source files found; OROD analyses Python repositories only.',
+        }),
+      ],
+      false,
+    )
+    const architect = roster.find((snapshot) => snapshot.definition.id === 'architect')
+    expect(architect?.state).toBe('failed')
+    expect(architect?.stateLabel).toBe('unsupported')
+    expect(architect?.headline).toContain('No Python source files found')
+    expect(architect?.verdict?.tone).toBe('bad')
+  })
+
+  it('flags a repository whose Python is only a small part', () => {
+    const roster = buildRoster(
+      record({ status: 'completed' }),
+      [
+        event({ agent: 'architect', event_type: 'agent_started' }),
+        event({
+          agent: 'architect',
+          level: 'warning',
+          message: 'Mostly JavaScript code: JavaScript (3), Python (1).',
+          payload: { partial: true },
+        }),
+        event({ agent: 'architect', event_type: 'agent_completed' }),
+      ],
+      false,
+    )
+    const architect = roster.find((snapshot) => snapshot.definition.id === 'architect')
+    expect(architect?.state).toBe('attention')
+    expect(architect?.stateLabel).toBe('partly mapped')
+    expect(architect?.verdict?.title).toBe('Only the Python part is analysed')
+  })
+
   it('does not call a scan clean when a scanner failed', () => {
     const roster = buildRoster(
       record({ status: 'completed', scan_complete: false }),

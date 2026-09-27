@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     frontend_origin: str = "http://localhost:5173"
+    # Host headers the API answers to. Anything else is refused, which is what stops a
+    # web page from reaching the API through DNS rebinding.
+    allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1"])
+    # Bearer token every API request must carry. Left empty, one is generated on first
+    # start into `api_token_path` (mode 0600) and reused; the dashboard's dev proxy reads it.
+    api_token: SecretStr = SecretStr("")
+    api_token_path: Path = Path("../data/api-token")
 
     database_path: Path = Path("../data/orod.sqlite3")
     checkpoint_path: Path = Path("../data/checkpoints.sqlite3")

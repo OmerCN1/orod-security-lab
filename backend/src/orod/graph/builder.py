@@ -8,9 +8,15 @@ from langgraph.types import interrupt
 
 from orod.agents.base import AgentServices
 from orod.application.finding_regressions import introduced_high_risk
-from orod.domain.errors import OrodError, PatchRejectedError, ScanFailedError
+from orod.domain.errors import (
+    OrodError,
+    PatchRejectedError,
+    ScanFailedError,
+    UnsupportedRepositoryError,
+)
 from orod.domain.events import EventLevel, EventType, RunEvent
 from orod.domain.findings import deduplicate_findings
+from orod.domain.languages import PYTHON, profile_languages
 from orod.domain.models import (
     Finding,
     FindingSource,
@@ -135,12 +141,49 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             bool(state.get("trusted", False)),
         )
         await mutate_run(state, repository=snapshot)
+        languages = profile_languages(snapshot.files)
+        language_payload = {"languages": languages.source_files}
+        if languages.python_files == 0:
+            # Every scanner, check and codemod is Python-specific: going on would report
+            # a clean repository that was never analysed.
+            message = (
+                "No Python source files found; OROD analyses Python repositories only. "
+                + (
+                    f"This repository contains {languages.describe()}."
+                    if languages.source_files
+                    else "No source files in a supported language were found."
+                )
+            )
+            await emit(
+                state,
+                "architect",
+                EventType.AGENT_COMPLETED,
+                message,
+                level=EventLevel.ERROR,
+                payload={**language_payload, "supported": False},
+            )
+            raise UnsupportedRepositoryError(message)
+        dominant = languages.dominant
+        if dominant is not None and dominant != PYTHON:
+            await emit(
+                state,
+                "architect",
+                EventType.RUN,
+                f"Mostly {dominant} code: {languages.describe()}. Only the "
+                f"{languages.python_files} Python file(s) are analysed; the rest is not scanned.",
+                level=EventLevel.WARNING,
+                payload={**language_payload, "partial": True},
+            )
         await emit(
             state,
             "architect",
             EventType.AGENT_COMPLETED,
             snapshot.summary,
-            payload={"files": len(snapshot.files), "dependencies": len(snapshot.dependencies)},
+            payload={
+                "files": len(snapshot.files),
+                "dependencies": len(snapshot.dependencies),
+                **language_payload,
+            },
         )
         return {
             "phase": RunPhase.ARCHITECT.value,

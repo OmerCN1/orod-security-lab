@@ -7,6 +7,13 @@ integrity of generated patches, and the developer's machine.
 
 ## Primary threats and controls
 
+- Other web pages reaching the local API: the API acts with the operator's GitHub
+  credentials, so any page open in the browser is a potential caller. Host validation
+  refuses non-loopback `Host` headers, which defeats DNS rebinding; every request needs
+  the bearer token from `data/api-token` (mode 0600) or `OROD_API_TOKEN`; writes with a
+  foreign `Origin` are refused. The dashboard's Vite proxy holds the token server-side
+  and Vite itself refuses unknown hosts, so the browser never sees it and the token is
+  never put in a URL, where access logs would record it.
 - Prompt injection in repository files: repository text is delimited and
   labelled untrusted; it cannot select tools or commands.
 - Arbitrary command execution: command adapters accept argv arrays and an

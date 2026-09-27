@@ -44,3 +44,7 @@ class RunAlreadyFinishedError(OrodError):
 
 class ScanFailedError(OrodError):
     """No security scanner completed, so the absence of findings means nothing."""
+
+
+class UnsupportedRepositoryError(OrodError):
+    """The repository is not one OROD can analyse, e.g. it contains no Python code."""

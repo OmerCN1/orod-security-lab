@@ -14,6 +14,7 @@ from orod.domain.errors import ScanFailedError, ScannerOutputError
 from orod.domain.events import EventType, RunEvent
 from orod.domain.models import (
     AdvisorySyncResult,
+    FileEntry,
     Finding,
     FindingSource,
     PackageDependency,
@@ -55,6 +56,7 @@ class FakeRepository:
             repository_url="demo://fake",
             workspace_path=str(self.workspace),
             trusted=True,
+            files=[FileEntry(path="app.py", size=len(BASE_SOURCE), language="python")],
             dependencies=[PINNED],
         )
 

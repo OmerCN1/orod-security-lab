@@ -6,6 +6,22 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Local API access control (ADR 0011). Non-loopback `Host` headers get 400, requests
+  without the bearer token 401, and writes from a foreign `Origin` 403. The token comes
+  from `OROD_API_TOKEN` or `data/api-token` (created once, mode 0600). The dashboard
+  calls the API same-origin through the Vite proxy, which adds the token server-side,
+  so the browser never holds it. Verified against the live stack: direct call without a
+  token 401, rebinding host 400 on the API and 403 on Vite, cross-site write 403, the
+  dashboard and its event stream working through the proxy.
+- A repository without Python source files now fails in the architect stage with an
+  explicit message instead of being reported clean; a mostly non-Python repository is
+  analysed with a warning, shown on the Architect card.
+- CI (`.github/workflows/ci.yml`): backend lint, mypy, tests and the deterministic
+  evaluation gated by `python -m evals run --check-baseline ../docs/evals/latest.json`;
+  frontend lint, tests, type check and build. Every step was run in a clean copy of the
+  tree, which caught seven graph tests broken by the new language check and a test that
+  wrote to the real `data/` directory; both fixed.
+
 - Repairs no longer undo the model's own fix. Because every attempt starts from the base
   revision, the B607 codemod used on a repair brought `shell=True` back on the demo
   repository, and the model never got a second attempt. The codemod now steps in only
@@ -205,6 +221,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Known Issues
 
+- The CI workflow has not run on GitHub yet; its steps were verified locally in a clean
+  copy. The Docker isolation test and model suites are not part of CI.
+- The dashboard relies on the Vite dev proxy for the API token; a production build
+  served without it needs its own token handling.
 - The validation image's entrypoint allowlist changed with baseline-aware validation;
   run `make validation-image` again, or GitHub validation fails closed.
 - A post-patch scanner failure still fails validation even when the same scanner also
@@ -239,6 +259,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- API access control, language check, CI: `uv run --no-sync pytest -q` — 283 passed,
+  1 opt-in Docker test skipped; Ruff and strict mypy (76 source files) passed.
+  `npm test -- --run` — 44 passed; lint and build passed. All CI steps also passed in a
+  clean copy of the tree; `--check-baseline` reports the baseline matches.
 - Repair routing and context: `uv run --no-sync pytest -q` — 265 passed, 1 opt-in Docker
   test skipped. A real `qwen2.5-coder:14b` run of `demo://vulnerable-python` failed with
   B607 unresolved before the change and passed validation on attempt 2 after it.

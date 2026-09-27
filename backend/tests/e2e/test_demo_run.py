@@ -9,6 +9,7 @@ from orod.adapters.llm.usage import UsageRecorder
 from orod.config import Settings
 from orod.domain.models import EditProposal, FileEdit, PatchProposal
 from orod.main import create_app
+from tests.api_auth import AUTH_HEADERS
 
 
 def test_localhost_and_loopback_frontends_are_allowed(tmp_path: Path) -> None:
@@ -18,7 +19,7 @@ def test_localhost_and_loopback_frontends_are_allowed(tmp_path: Path) -> None:
         chroma_path=tmp_path / "chroma",
         workspace_root=tmp_path / "workspaces",
     )
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers=AUTH_HEADERS) as client:
         response = client.options(
             "/api/v1/runs",
             headers={
@@ -43,7 +44,7 @@ def test_demo_run_finds_and_fixes_shell_true(tmp_path: Path) -> None:
         command_timeout_seconds=30,
         event_poll_interval_seconds=0.01,
     )
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers=AUTH_HEADERS) as client:
         response = client.post(
             "/api/v1/runs",
             json={"repository_url": "demo://vulnerable-python", "trusted": True},
@@ -113,7 +114,7 @@ def test_event_replay_honours_an_explicit_zero_last_event_id(tmp_path: Path) -> 
         command_timeout_seconds=30,
         event_poll_interval_seconds=0.01,
     )
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers=AUTH_HEADERS) as client:
         run_id = client.post(
             "/api/v1/runs",
             json={"repository_url": "demo://vulnerable-python", "trusted": True},
@@ -180,7 +181,7 @@ def test_model_edits_reach_the_workspace_through_the_graph(tmp_path: Path) -> No
                 )
             )
 
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers=AUTH_HEADERS) as client:
         registry = client.app.state.llm_registry  # type: ignore[attr-defined]
         registry.default()._primary = EditingModel("fake")  # noqa: SLF001
         run_id = client.post(

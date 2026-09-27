@@ -167,14 +167,30 @@ function architect({ run, events, life }: Context): Partial<AgentSnapshot> {
   }
   const done = events.find((event) => event.event_type === 'agent_completed')
   const files = run.repository?.files ?? []
+  const steps = files.map((file) => ({
+    ok: null,
+    label: file.path,
+    detail: `${file.size} bytes${file.language ? ` · ${file.language}` : ''}`,
+  }))
+  if (done?.level === 'error') {
+    // Not a Python repository: nothing downstream ran, and it must not read as clean.
+    return {
+      stateLabel: 'unsupported',
+      headline: done.message,
+      steps,
+      verdict: {
+        tone: 'bad',
+        title: 'Not analysed',
+        detail: 'OROD analyses Python repositories only, so no scanner looked at this code.',
+      },
+    }
+  }
+  const partial = events.find((event) => event.payload.partial === true)
   return {
-    stateLabel: 'mapped',
+    stateLabel: partial ? 'partly mapped' : 'mapped',
     headline: run.repository?.summary ?? done?.message ?? '',
-    steps: files.map((file) => ({
-      ok: null,
-      label: file.path,
-      detail: `${file.size} bytes${file.language ? ` · ${file.language}` : ''}`,
-    })),
+    steps,
+    verdict: partial ? { tone: 'wait', title: 'Only the Python part is analysed', detail: partial.message } : null,
   }
 }
 

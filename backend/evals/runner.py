@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import shutil
 import sys
 import time
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi import FastAPI
+from pydantic import SecretStr
 
 from evals.manifest import CASES_ROOT, EvalCase
 from evals.metrics import (
@@ -61,6 +63,9 @@ def build_settings(workspace: Path, model: str, use_llm: bool, command_timeout: 
         enable_github_publish=False,
         command_timeout_seconds=command_timeout,
         event_poll_interval_seconds=0.01,
+        # The harness drives the app in-process; a throwaway token keeps it from creating
+        # the operator's token file.
+        api_token=SecretStr(secrets.token_urlsafe(32)),
     )
 
 

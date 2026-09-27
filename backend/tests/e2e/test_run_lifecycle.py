@@ -8,6 +8,7 @@ from orod.adapters.persistence.sqlite import SQLiteRunStore
 from orod.config import Settings
 from orod.domain.models import RunPhase, RunRecord, RunStatus
 from orod.main import create_app
+from tests.api_auth import AUTH_HEADERS
 
 
 def lifecycle_settings(tmp_path: Path) -> Settings:
@@ -41,7 +42,7 @@ def test_startup_fails_runs_a_previous_process_left_running(tmp_path: Path) -> N
         )
 
     asyncio.run(seed())
-    with TestClient(create_app(settings)) as client:
+    with TestClient(create_app(settings), headers=AUTH_HEADERS) as client:
         run = client.get("/api/v1/runs/stranded").json()
         assert run["status"] == "failed"
         assert run["phase"] == "failed"
@@ -52,7 +53,7 @@ def test_startup_fails_runs_a_previous_process_left_running(tmp_path: Path) -> N
 
 
 def test_cancelling_a_completed_run_is_refused_and_keeps_its_result(tmp_path: Path) -> None:
-    with TestClient(create_app(lifecycle_settings(tmp_path))) as client:
+    with TestClient(create_app(lifecycle_settings(tmp_path)), headers=AUTH_HEADERS) as client:
         created = client.post(
             "/api/v1/runs", json={"repository_url": "demo://vulnerable-python", "trusted": True}
         )

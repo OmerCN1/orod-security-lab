@@ -8,7 +8,11 @@ import type {
   RunSummary,
 } from '../types'
 
-export const API_ROOT = import.meta.env.VITE_API_ROOT ?? 'http://127.0.0.1:8000/api/v1'
+/**
+ * Same-origin by default: the dev server proxies `/api` to the backend and adds the API
+ * token there, so it never reaches the browser.
+ */
+export const API_ROOT = import.meta.env.VITE_API_ROOT ?? '/api/v1'
 
 /** Event names the backend emits; EventSource needs each one registered explicitly. */
 const RUN_EVENT_TYPES = [

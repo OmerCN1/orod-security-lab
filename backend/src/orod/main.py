@@ -5,8 +5,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from orod import __version__
@@ -23,6 +24,7 @@ from orod.adapters.scanners.semgrep import SemgrepScanner
 from orod.adapters.vector.chroma import ChromaAdvisoryStore
 from orod.agents.base import AgentServices
 from orod.api.routes import health, models, runs, vulnerabilities
+from orod.api.security import load_or_create_api_token, require_api_access
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
 from orod.graph.builder import build_security_team
@@ -48,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configured.ensure_directories()
+        app.state.api_token = load_or_create_api_token(configured)
         store = SQLiteRunStore(configured.database_path)
         await store.initialize()
         semgrep_executable = str(Path(sys.executable).parent / "semgrep")
@@ -118,17 +121,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Local-first autonomous code security and refactoring team",
         lifespan=lifespan,
     )
+    origins = local_frontend_origins(configured.frontend_origin)
+    app.state.allowed_origins = frozenset(origins)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=local_frontend_origins(configured.frontend_origin),
+        allow_origins=origins,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "Last-Event-ID"],
+        allow_headers=["Authorization", "Content-Type", "Last-Event-ID"],
     )
-    app.include_router(health.router, prefix="/api/v1")
-    app.include_router(models.router, prefix="/api/v1")
-    app.include_router(runs.router, prefix="/api/v1")
-    app.include_router(vulnerabilities.router, prefix="/api/v1")
+    # Outermost: a request whose Host is not loopback is refused before anything else,
+    # which is what defeats DNS rebinding.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=configured.allowed_hosts)
+    protected = [Depends(require_api_access)]
+    for router in (health.router, models.router, runs.router, vulnerabilities.router):
+        app.include_router(router, prefix="/api/v1", dependencies=protected)
 
     @app.get("/", include_in_schema=False)
     async def root() -> dict[str, str]:

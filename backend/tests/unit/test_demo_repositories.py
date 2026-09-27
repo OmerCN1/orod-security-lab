@@ -10,7 +10,13 @@ from orod.domain.models import RunCreate
 
 
 def adapter_for(fixture_root: Path, tmp_path: Path) -> GitRepositoryAdapter:
-    settings = Settings(fixture_root=fixture_root, workspace_root=tmp_path / "workspaces")
+    settings = Settings(
+        fixture_root=fixture_root,
+        workspace_root=tmp_path / "workspaces",
+        database_path=tmp_path / "orod.sqlite3",
+        checkpoint_path=tmp_path / "checkpoints.sqlite3",
+        chroma_path=tmp_path / "chroma",
+    )
     settings.ensure_directories()
     return GitRepositoryAdapter(settings, runner=None)  # type: ignore[arg-type]
 

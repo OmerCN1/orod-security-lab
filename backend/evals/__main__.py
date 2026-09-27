@@ -6,6 +6,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+from evals.gate import suite_drift
 from evals.manifest import CASES_ROOT, load_cases
 from evals.metrics import EvalReport
 from evals.report import git_commit, publish, render_comparison_table, write_report
@@ -68,6 +69,15 @@ async def _run(args: argparse.Namespace) -> int:
     if args.publish:
         for path in publish(report, cases, REPO_ROOT):
             print(f"published {path}", file=sys.stderr)
+
+    if args.check_baseline:
+        drift = suite_drift(report, Path(args.check_baseline), BASELINE_LABEL)
+        if drift:
+            print("deterministic baseline regressed:", file=sys.stderr)
+            for problem in drift:
+                print(f"  - {problem}", file=sys.stderr)
+            return 1
+        print(f"deterministic baseline matches {args.check_baseline}", file=sys.stderr)
 
     if args.fail_under is not None:
         graded = [s for s in report.suites if not s.skipped_reason and s.label != BASELINE_LABEL]
@@ -133,6 +143,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="RATIO",
         help="exit non-zero if a model suite meets fewer than this share of expected outcomes",
+    )
+    run.add_argument(
+        "--check-baseline",
+        metavar="REPORT",
+        help=(
+            "exit non-zero if the deterministic baseline does worse than in this recorded "
+            "report (e.g. ../docs/evals/latest.json)"
+        ),
     )
     run.set_defaults(handler=lambda args: asyncio.run(_run(args)))
 

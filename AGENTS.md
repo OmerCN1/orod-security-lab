@@ -51,6 +51,8 @@ that never completes reads as permanently in flight.
 
 - Never log credentials, authorization headers, full environment dictionaries,
   or repository secrets.
+- The API answers loopback hosts only and requires the local bearer token; never
+  put the token in a URL or ship it to the browser.
 - Never pass LLM output to a shell. Commands use fixed executable/argv lists.
 - Resolve and verify every workspace path before reading or writing it.
 - Reject symlinks, binary files, hidden secret files, and oversized diffs.

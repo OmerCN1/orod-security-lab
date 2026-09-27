@@ -2,9 +2,25 @@
 
 All endpoints are under `/api/v1`.
 
+## Access
+
+Every endpoint requires `Authorization: Bearer <token>`; `/openapi.json` and `/docs`
+do not. The token is `OROD_API_TOKEN` or, when that is empty, the contents of
+`data/api-token`, which the backend creates on first start with mode 0600. Requests
+whose `Host` is not in `OROD_ALLOWED_HOSTS` (default `localhost`, `127.0.0.1`) get `400`,
+missing or wrong tokens get `401`, and a write (`POST`) carrying an `Origin` other than
+the dashboard's gets `403`.
+
+The dashboard never holds the token: its dev server proxies `/api` to the backend and
+adds the header there, so the browser calls the API same-origin. For `curl`, read the
+token from the file, e.g. `scripts/demo.sh`; in `/docs`, paste it into **Authorize**.
+
 ## Runs
 
-- `POST /runs` — start an analysis; returns HTTP 202. Body accepts
+- `POST /runs` — start an analysis; returns HTTP 202. A repository without Python source
+  files fails in the architect stage with an "OROD analyses Python repositories only"
+  error instead of reporting a clean scan; one that is mostly another language is
+  analysed with a warning that only its Python files are covered. Body accepts
   `repository_url`, optional `base_branch`, `trusted`, and an optional `model`
   identifier that overrides the server default for this run only.
   `trusted` defaults to `false`: setting it to `true` explicitly authorizes execution

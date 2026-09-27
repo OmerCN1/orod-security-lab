@@ -51,6 +51,12 @@ make frontend
 
 UI: <http://localhost:5173> — API: <http://localhost:8000/docs>
 
+The API only answers loopback hosts and requires a token, which the backend writes to
+`data/api-token` (mode 0600) on first start. The dashboard's dev server adds it for you;
+for `curl` or the `/docs` page, use the file's contents as a bearer token. Only Python
+repositories are analysed; a repository without Python code is stopped with a message
+rather than reported clean.
+
 `demo://vulnerable-python` is an end-to-end demo repository that needs no network
 or GitHub account. For a real GitHub repository and a draft PR, run `gh auth login`
 first, then set `OROD_ENABLE_GITHUB_PUBLISH=true` in `.env`.
