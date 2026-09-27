@@ -112,3 +112,22 @@ async def test_migration_preserves_sub_second_ordering(tmp_path: Path) -> None:
     await store.initialize()
 
     assert [run.id for run in await store.list_runs()] == ["aa-newer", "zz-older"]
+
+
+async def test_list_runs_with_status_selects_on_the_persisted_status(tmp_path: Path) -> None:
+    store = SQLiteRunStore(tmp_path / "status.sqlite3")
+    await store.initialize()
+    for run_id, status in (
+        ("running", RunStatus.RUNNING),
+        ("queued", RunStatus.QUEUED),
+        ("paused", RunStatus.AWAITING_REVIEW),
+        ("done", RunStatus.COMPLETED),
+    ):
+        await store.create_run(
+            RunRecord(id=run_id, repository_url="demo://vulnerable-python", status=status)
+        )
+
+    selected = await store.list_runs_with_status({RunStatus.RUNNING, RunStatus.QUEUED})
+
+    assert sorted(run.id for run in selected) == ["queued", "running"]
+    assert await store.list_runs_with_status(set()) == []

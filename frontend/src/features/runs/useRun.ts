@@ -123,11 +123,18 @@ export function useRun(): UseRun {
         const runId = runIdRef.current
         if (!runId) return
         closeStream()
-        const cancelled = await cancelRun(runId)
-        statusRef.current = cancelled.status
-        setRun(cancelled)
+        try {
+          const cancelled = await cancelRun(runId)
+          statusRef.current = cancelled.status
+          setRun(cancelled)
+        } catch (reason) {
+          // A run that finished meanwhile is refused (409); show its real final state
+          // instead of the stale live one whose stream was just closed.
+          await refresh(runId).catch(() => undefined)
+          throw reason
+        }
       }),
-    [closeStream, guard],
+    [closeStream, guard, refresh],
   )
 
   const review = useCallback(

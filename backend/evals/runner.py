@@ -25,6 +25,7 @@ from evals.metrics import (
 from orod.application.finding_regressions import introduced_high_risk
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
+from orod.domain.errors import RunAlreadyFinishedError
 from orod.domain.findings import deduplicate_findings
 from orod.domain.models import Finding, FindingSource, RunCreate, RunRecord
 from orod.main import create_app
@@ -101,10 +102,15 @@ async def _await_terminal_run(
         if record is not None and record.status.value in TERMINAL_STATUSES:
             return record
         if time.monotonic() >= deadline:
-            await _coordinator(app).cancel(run_id)
+            try:
+                await _coordinator(app).cancel(run_id)
+            except RunAlreadyFinishedError:
+                pass  # It finished at the deadline; report that result below.
             cancelled = await store.get_run(run_id)
             if cancelled is None:
                 raise RuntimeError(f"run {run_id} vanished from the store")
+            if cancelled.status.value != "cancelled":
+                return cancelled
             cancelled.error = cancelled.error or f"case timed out after {timeout_seconds:.0f}s"
             return cancelled
         await asyncio.sleep(0.05)

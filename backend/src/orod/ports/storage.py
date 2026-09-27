@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orod.domain.events import RunEvent
-from orod.domain.models import RunRecord
+from orod.domain.models import RunRecord, RunStatus
 
 
 class RunStore(Protocol):
@@ -14,6 +14,8 @@ class RunStore(Protocol):
     async def get_run(self, run_id: str) -> RunRecord | None: ...
 
     async def list_runs(self, limit: int = 50, offset: int = 0) -> list[RunRecord]: ...
+
+    async def list_runs_with_status(self, statuses: set[RunStatus]) -> list[RunRecord]: ...
 
     async def save_run(self, run: RunRecord) -> None: ...
 

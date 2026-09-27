@@ -26,7 +26,19 @@ All endpoints are under `/api/v1`.
 - `GET /runs/{id}/patch` — patch and validation report.
 - `GET /runs/{id}/pull-request` — draft pull-request result.
 - `POST /runs/{id}/review` — submit a human decision; returns HTTP 202.
-- `POST /runs/{id}/cancel` — cancel an in-process run.
+- `POST /runs/{id}/cancel` — cancel a queued, running or paused run. A running run is
+  stopped and awaited for up to `OROD_CANCEL_GRACE_SECONDS` so its process groups and
+  validation containers are gone before `cancelled` is saved. Cancelling a cancelled run
+  returns it unchanged; a completed or failed run is never rewritten and returns `409`.
+
+## Run lifecycle
+
+At most `OROD_MAX_CONCURRENT_RUNS` runs execute at once; further runs stay `queued` and
+receive a "Waiting for a free run slot" event. A resumed review takes a slot as well.
+When the backend starts, runs a previous process left `queued` or `running` are marked
+`failed` with an "interrupted" error, because their tasks died with that process. Runs
+in `awaiting_review` are left alone: their graph is parked on a checkpoint.
+This assumes a single backend process owns the database.
 
 ## Review
 
@@ -50,6 +62,9 @@ pause survives a backend restart.
 
 Other responses: `404` when the run does not exist, `409` when the run is not waiting
 for a decision (or one is already being applied), `422` for an invalid submission.
+Decisions are matched to the review round they answer, so concurrent submissions resume
+the graph once: the second receives `409`. A decision that arrives while the run is still
+finishing its pause is held until the pause completes, then applied.
 
 ## Models
 

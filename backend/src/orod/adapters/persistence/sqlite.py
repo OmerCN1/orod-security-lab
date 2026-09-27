@@ -6,7 +6,7 @@ from pathlib import Path
 import aiosqlite
 
 from orod.domain.events import RunEvent
-from orod.domain.models import RunRecord
+from orod.domain.models import RunRecord, RunStatus
 
 
 class SQLiteRunStore:
@@ -94,6 +94,22 @@ class SQLiteRunStore:
                 LIMIT ? OFFSET ?
                 """,
                 (max(1, min(limit, 200)), max(0, offset)),
+            )
+            rows = await cursor.fetchall()
+        return [RunRecord.model_validate_json(row[0]) for row in rows]
+
+    async def list_runs_with_status(self, statuses: set[RunStatus]) -> list[RunRecord]:
+        if not statuses:
+            return []
+        placeholders = ", ".join("?" for _ in statuses)
+        async with aiosqlite.connect(self._path) as db:
+            cursor = await db.execute(
+                f"""
+                SELECT payload FROM runs
+                WHERE json_extract(payload, '$.status') IN ({placeholders})
+                ORDER BY created_at ASC, id ASC
+                """,  # noqa: S608 -- only "?" placeholders are interpolated
+                tuple(sorted(status.value for status in statuses)),
             )
             rows = await cursor.fetchall()
         return [RunRecord.model_validate_json(row[0]) for row in rows]

@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     max_file_bytes: int = 1_000_000
     max_diff_lines: int = 800
     command_timeout_seconds: int = 120
+    # Runs beyond this limit wait in `queued`; resumed reviews take a slot too.
+    max_concurrent_runs: int = Field(default=2, ge=1)
+    # How long a cancel waits for the run's subprocesses and containers to be cleaned up.
+    cancel_grace_seconds: float = Field(default=15.0, gt=0)
     validation_image: str = Field(
         default="orod-validation:local", pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._/@:-]*$"
     )

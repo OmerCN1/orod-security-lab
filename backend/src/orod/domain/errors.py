@@ -36,3 +36,7 @@ class ReviewNotAllowedError(OrodError):
 
 class WorkspaceIntegrityError(OrodError):
     """The run workspace no longer matches the changes OROD itself applied."""
+
+
+class RunAlreadyFinishedError(OrodError):
+    """An action that needs a live run was requested for a completed or failed run."""

@@ -6,6 +6,21 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Run lifecycle control (ADR 0008). Concurrent review decisions resume the graph once:
+  checks and task launch share one coordinator lock, and each decision is tied to the
+  review round it answers. A decision that arrives while the pausing task is still
+  writing its checkpoint is held and applied instead of being refused with `409`; this
+  race also made `test_review_endpoint_rejects_decisions_for_runs_that_are_not_paused`
+  flaky.
+- `cancel` no longer rewrites completed or failed runs (HTTP 409), is idempotent for
+  cancelled ones, and waits up to `OROD_CANCEL_GRACE_SECONDS` for the run's subprocesses
+  and containers to be cleaned up before saving `cancelled`. The dashboard refreshes the
+  run when a stop is refused, so it shows the real final state.
+- `OROD_MAX_CONCURRENT_RUNS` (default 2) bounds executing runs; later runs wait in
+  `queued` with a "Waiting for a free run slot" event.
+- At startup, runs a previous process left `queued` or `running` are failed as
+  interrupted instead of staying in flight forever; paused runs remain resumable.
+
 - Every patch attempt now starts from the base revision (ADR 0007). The previous attempt's
   recorded diff is reversed with `git apply -R` before a repair or regeneration, and a
   patch is refused on a workspace that still carries changes. Attempts used to stack, so
@@ -133,10 +148,11 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
-- Run management: serialize `submit_review` so two concurrent decisions cannot resume the
-  graph twice (the check and `create_task` are separated by an `await`); make `cancel`
-  a no-op for terminal runs; add a concurrent-run limit; reconcile `running` runs left
-  behind by a backend restart.
+- Baseline-aware validation: compare compile/Ruff/Bandit/pytest results with the base
+  revision so pre-existing failures do not block every patch, and do not report a pass
+  when no tests ran because there is no `tests/` directory. Separate "a scanner failed"
+  from "no findings" in the run record and the dashboard; today a failed scanner only
+  emits a warning event and a run whose scanners all fail completes as clean.
 - Record the model suites and publish the comparison table:
   `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`.
   Requires a running Ollama with `qwen2.5-coder:14b` pulled and/or `OROD_ANTHROPIC_API_KEY`;
@@ -153,6 +169,8 @@ Phase 9 — Agent-centred dashboard
 
 ## Known Issues
 
+- Run control assumes a single backend process owns the database. Queued runs live in
+  memory; after a restart they are failed as interrupted rather than resumed.
 - The post-patch residual check covers code findings only: dependency remediation is not
   automated, so OSV findings are still "selected" but can never be resolved by a patch.
   They do count toward the new-high-finding gate.
@@ -185,6 +203,14 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Run lifecycle control: `uv run --no-sync pytest -q` — 212 passed, 1 opt-in Docker test
+  skipped, three consecutive runs; the review-flow e2e file passed ten runs in a row.
+  New coordinator tests fail against the previous coordinator (9 of 10 before the round
+  tests were added). Ruff and strict mypy (71 source files) passed.
+- Same change: `npm test -- --run` — 40 passed; ESLint, `tsc -b --noEmit` and
+  `npm run build` passed.
+- `make eval EVAL_ARGS='--out <scratch>'` — unchanged deterministic baseline: F1 1.00,
+  auto-fix 1/16, patch validity 12%, policy 2/2, zero regressions.
 - Attempt isolation and identity-based regressions: `uv run --no-sync pytest -q` — 197
   passed, 1 opt-in Docker test skipped. New tests fail against the previous graph builder.
 - Same change: `ruff check src tests evals containers ../scripts/verify_ollama.py` and

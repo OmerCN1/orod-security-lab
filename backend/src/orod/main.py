@@ -91,7 +91,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 publisher=publisher,
             )
             graph = build_security_team(services, checkpointer)
-            coordinator = RunCoordinator(graph, store)
+            coordinator = RunCoordinator(
+                graph,
+                store,
+                max_concurrent_runs=configured.max_concurrent_runs,
+                cancel_grace_seconds=configured.cancel_grace_seconds,
+            )
+            # Before accepting requests: runs a previous process left mid-flight are
+            # failed rather than shown as running forever.
+            await coordinator.reconcile_interrupted_runs()
             app.state.settings = configured
             app.state.store = store
             app.state.runner = runner

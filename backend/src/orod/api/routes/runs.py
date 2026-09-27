@@ -13,6 +13,7 @@ from orod.config import Settings
 from orod.domain.errors import (
     ReviewNotAllowedError,
     ReviewNotPendingError,
+    RunAlreadyFinishedError,
     RunNotFoundError,
     UnsafePathError,
 )
@@ -190,7 +191,10 @@ async def cancel_run(
     run_id: str,
     coordinator: Annotated[RunCoordinator, Depends(get_coordinator)],
 ) -> RunRecord:
-    run = await coordinator.cancel(run_id)
+    try:
+        run = await coordinator.cancel(run_id)
+    except RunAlreadyFinishedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if run is None:
         raise HTTPException(status_code=404, detail="run not found")
     return run
