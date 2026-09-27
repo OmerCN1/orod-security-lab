@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-27T13:00:42+00:00",
-  "git_commit": "cbdff93",
+  "generated_at": "2026-09-27T13:21:50+00:00",
+  "git_commit": "ec8fe55",
   "corpus_size": 20,
   "scanners": [
     "builtin-python",
@@ -12,8 +12,8 @@
       "model": "deterministic",
       "provider": "deterministic",
       "use_llm": false,
-      "started_at": "2026-09-27T13:00:42.995549+00:00",
-      "finished_at": "2026-09-27T13:00:57.813793+00:00",
+      "started_at": "2026-09-27T13:21:50.402805+00:00",
+      "finished_at": "2026-09-27T13:22:05.044295+00:00",
       "skipped_reason": null,
       "results": [
         {
@@ -24,7 +24,7 @@
           "tags": [
             "policy"
           ],
-          "run_id": "66cc90ba-887e-4128-b3ff-d2ff5c9a83ad",
+          "run_id": "13728b21-55a0-4ac2-b558-0805d30d87ec",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -45,7 +45,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported and correctly left for manual review",
-          "duration_ms": 210,
+          "duration_ms": 178,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -65,7 +65,7 @@
           "tags": [
             "control"
           ],
-          "run_id": "b1c0d667-ac6a-4d49-b1c5-d392fee73517",
+          "run_id": "5353ae91-74c2-4195-8e12-b941cfb9b502",
           "run_status": "completed",
           "error": null,
           "detected_rules": [],
@@ -82,7 +82,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "no findings and no patch",
-          "duration_ms": 181,
+          "duration_ms": 163,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -102,7 +102,7 @@
           "tags": [
             "code-injection"
           ],
-          "run_id": "9abc7a85-e31c-4356-a177-d0391dac500e",
+          "run_id": "b45bc6dc-5f7f-4ae8-8380-610af853e23c",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -123,7 +123,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 672,
+          "duration_ms": 643,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -143,7 +143,7 @@
           "tags": [
             "code-injection"
           ],
-          "run_id": "4a7eab42-620f-48b1-a724-aebcdf3662e4",
+          "run_id": "2e2efd59-0a08-4a9c-a6ef-cbaf3f9efb36",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -164,7 +164,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 583,
+          "duration_ms": 580,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -184,7 +184,7 @@
           "tags": [
             "misconfiguration"
           ],
-          "run_id": "81deee21-f153-4ee0-b281-38ba9e2224d9",
+          "run_id": "1fee894f-7881-45e8-b125-69e737971fa2",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -205,7 +205,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 610,
+          "duration_ms": 585,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -225,7 +225,7 @@
           "tags": [
             "secrets"
           ],
-          "run_id": "dfc26382-fd9a-4202-93a1-78b95061229c",
+          "run_id": "6d4a5731-5dbe-4aab-8bfe-424a163db421",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -246,7 +246,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 563,
+          "duration_ms": 575,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -266,7 +266,7 @@
           "tags": [
             "filesystem"
           ],
-          "run_id": "eb77a8d7-93b5-49dc-aa77-8981dc74d139",
+          "run_id": "f2a38e52-51a6-4683-b9ee-6acbff1a5f22",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -287,7 +287,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 564,
+          "duration_ms": 573,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -308,7 +308,7 @@
             "crypto",
             "policy"
           ],
-          "run_id": "080d9f8a-d98f-48ad-bb85-63f99d3b2b48",
+          "run_id": "a9cd2d07-4332-43c5-b93d-686ac3cbcc53",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -329,7 +329,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported and correctly left for manual review",
-          "duration_ms": 161,
+          "duration_ms": 165,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -349,7 +349,7 @@
           "tags": [
             "xss"
           ],
-          "run_id": "e6eb00e2-fa19-472d-8879-577a981cc13a",
+          "run_id": "4488da7e-0358-4310-ac12-942ff6be52f8",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -370,7 +370,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 561,
+          "duration_ms": 604,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -390,7 +390,7 @@
           "tags": [
             "ssh"
           ],
-          "run_id": "d395a1e3-409b-401d-aabd-b87b098cad5e",
+          "run_id": "3b3cb740-90b3-4239-81c2-f9bcc9ba23e2",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -411,7 +411,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 592,
+          "duration_ms": 575,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -432,7 +432,7 @@
             "path-hijack",
             "subprocess"
           ],
-          "run_id": "bb798985-98c9-454c-8a78-cfea74beb76c",
+          "run_id": "db4333e3-8a5e-479a-b7ed-e771cf57968d",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -455,7 +455,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 1103,
+          "duration_ms": 1116,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -475,7 +475,7 @@
           "tags": [
             "deserialisation"
           ],
-          "run_id": "8989866c-5133-499d-9c00-eb2d1fd84275",
+          "run_id": "cfff4f99-381f-4475-ba8e-52a0be61e18f",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -497,7 +497,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 582,
+          "duration_ms": 576,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -517,7 +517,7 @@
           "tags": [
             "tls"
           ],
-          "run_id": "2911243e-19fe-4f3a-b6fe-561ed6414f20",
+          "run_id": "06e2d835-1220-4e44-b02c-acf80ff174be",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -538,7 +538,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 561,
+          "duration_ms": 571,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -559,7 +559,7 @@
             "command-injection",
             "subprocess"
           ],
-          "run_id": "891ea954-9402-405c-b8b2-3cd514843769",
+          "run_id": "7e364a44-6366-47d8-88b0-8ce5610839da",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -601,7 +601,7 @@
           "tags": [
             "error-handling"
           ],
-          "run_id": "e32cce01-e972-4c8d-ab05-a1c4f197deaf",
+          "run_id": "bf621d07-02a0-443e-9ace-5095e1d0df80",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -622,7 +622,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 599,
+          "duration_ms": 595,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -642,7 +642,7 @@
           "tags": [
             "sql-injection"
           ],
-          "run_id": "2f636168-b8c3-4c2d-83f1-5b7f55218222",
+          "run_id": "a36f08b6-3dc9-4426-92e6-fdc559508ad0",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -663,7 +663,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 671,
+          "duration_ms": 577,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -683,7 +683,7 @@
           "tags": [
             "tls"
           ],
-          "run_id": "41ee10a1-c7d9-4bf9-946a-a969b2db1a51",
+          "run_id": "66c2bfd9-894c-4f44-a8a2-7cb48e6933c2",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -704,7 +704,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 599,
+          "duration_ms": 581,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -724,7 +724,7 @@
           "tags": [
             "crypto"
           ],
-          "run_id": "24d533ed-fa4d-490d-bfb5-0a1f175c29ea",
+          "run_id": "8e44633a-41d1-4ae4-bcfe-95937960a562",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -745,7 +745,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 592,
+          "duration_ms": 575,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -765,7 +765,7 @@
           "tags": [
             "xxe"
           ],
-          "run_id": "406e9f2b-d13d-43fb-8f1a-f44bd5820b0b",
+          "run_id": "c835de75-cca3-451e-b2be-c880e21ca119",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -787,7 +787,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported; remediation is out of scope for this case",
-          "duration_ms": 578,
+          "duration_ms": 570,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -807,7 +807,7 @@
           "tags": [
             "deserialisation"
           ],
-          "run_id": "1b9239fe-0411-4157-848e-9648c2899f39",
+          "run_id": "b09e175a-e87f-4c83-8af9-9433c1cf1699",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -828,7 +828,7 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "no patch was applied: No patch to validate.",
-          "duration_ms": 572,
+          "duration_ms": 568,
           "llm_usage": {
             "provider": "deterministic",
             "model": "",
@@ -863,9 +863,9 @@
         "regressions": 0,
         "outcomes_met": 5,
         "outcome_rate": 0.25,
-        "total_duration_ms": 12209,
-        "median_duration_ms": 582,
-        "p95_duration_ms": 1103,
+        "total_duration_ms": 12025,
+        "median_duration_ms": 575,
+        "p95_duration_ms": 1116,
         "llm_calls": 34,
         "failed_llm_calls": 0,
         "input_tokens": 0,
@@ -878,8 +878,8 @@
       "model": "qwen2.5-coder:14b",
       "provider": "ollama",
       "use_llm": true,
-      "started_at": "2026-09-27T13:00:57.813842+00:00",
-      "finished_at": "2026-09-27T13:04:01.125990+00:00",
+      "started_at": "2026-09-27T13:22:05.044341+00:00",
+      "finished_at": "2026-09-27T13:25:18.734677+00:00",
       "skipped_reason": null,
       "results": [
         {
@@ -890,7 +890,7 @@
           "tags": [
             "policy"
           ],
-          "run_id": "d8414c70-f591-4f43-991b-3d6d4907ae1a",
+          "run_id": "72b3bce5-65ec-4a3e-943f-353f21d58d3e",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -911,7 +911,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported and correctly left for manual review",
-          "duration_ms": 225,
+          "duration_ms": 170,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
@@ -931,7 +931,7 @@
           "tags": [
             "control"
           ],
-          "run_id": "5bf6e1c8-d335-4a86-ae9b-20974a786222",
+          "run_id": "39b92d4a-f967-4431-8ef0-ef3566414139",
           "run_status": "completed",
           "error": null,
           "detected_rules": [],
@@ -948,7 +948,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "no findings and no patch",
-          "duration_ms": 219,
+          "duration_ms": 183,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
@@ -968,7 +968,7 @@
           "tags": [
             "code-injection"
           ],
-          "run_id": "efb074e9-4313-4b87-b07e-9d67de8ab34a",
+          "run_id": "3521b1c3-5389-4e7e-b50e-308fb577b887",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -983,21 +983,21 @@
           },
           "patch_generated": true,
           "patch_attempts": 2,
-          "validation_passed": false,
-          "validation_summary": "Validation failed: ruff: F821 app.py Undefined name `ast`; pytest: failed tests/test_app.py::test_parse_setting_reads_a_mapping; pytest: 1 fewer passing test(s) than before the patch.",
+          "validation_passed": true,
+          "validation_summary": "All fixed validation checks passed.",
           "residual_target_findings": [],
           "new_high_findings": 0,
-          "outcome_met": false,
-          "outcome_detail": "validation failed: Validation failed: ruff: F821 app.py Undefined name `ast`; pytest: failed tests/test_app.py::test_parse_setting_reads_a_mapping; pytest: 1 fewer passing test(s) than before the patch.",
-          "duration_ms": 12894,
+          "outcome_met": true,
+          "outcome_detail": "validated patch resolved the finding",
+          "duration_ms": 15076,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 714,
-            "output_tokens": 247,
-            "latency_ms": 11151
+            "input_tokens": 836,
+            "output_tokens": 278,
+            "latency_ms": 13389
           },
           "cost_usd": 0.0
         },
@@ -1009,7 +1009,7 @@
           "tags": [
             "code-injection"
           ],
-          "run_id": "f9837ff7-882d-4c41-bc82-8ceb9f5b96c0",
+          "run_id": "003abbbc-34e5-47bf-a4bc-07b267817f88",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1030,15 +1030,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 7075,
+          "duration_ms": 7016,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 364,
-            "output_tokens": 123,
-            "latency_ms": 5886
+            "input_tokens": 363,
+            "output_tokens": 124,
+            "latency_ms": 5901
           },
           "cost_usd": 0.0
         },
@@ -1050,7 +1050,7 @@
           "tags": [
             "misconfiguration"
           ],
-          "run_id": "664690b2-9c16-4fb2-9df4-7f0bb2ef8053",
+          "run_id": "390e8a37-fe21-4d52-9c38-3aad46461997",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1071,15 +1071,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 5941,
+          "duration_ms": 6928,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 371,
-            "output_tokens": 115,
-            "latency_ms": 4786
+            "input_tokens": 370,
+            "output_tokens": 116,
+            "latency_ms": 5801
           },
           "cost_usd": 0.0
         },
@@ -1091,7 +1091,7 @@
           "tags": [
             "secrets"
           ],
-          "run_id": "8270876a-40a2-47de-af9a-5cf9ade20ccf",
+          "run_id": "036912da-740f-4d8f-a807-e2bc8ab487f1",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1107,20 +1107,20 @@
           "patch_generated": true,
           "patch_attempts": 2,
           "validation_passed": false,
-          "validation_summary": "Validation failed: ruff: F821 app.py Undefined name `os`; pytest: error tests/test_app.py.",
+          "validation_summary": "Validation failed: ruff: F401 app.py `os` imported but unused; ruff: F821 app.py Undefined name `os`; pytest: error tests/test_app.py.",
           "residual_target_findings": [],
           "new_high_findings": 0,
           "outcome_met": false,
-          "outcome_detail": "validation failed: Validation failed: ruff: F821 app.py Undefined name `os`; pytest: error tests/test_app.py.",
-          "duration_ms": 12992,
+          "outcome_detail": "validation failed: Validation failed: ruff: F401 app.py `os` imported but unused; ruff: F821 app.py Undefined name `os`; pytest: error tests/test_app.py.",
+          "duration_ms": 16970,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 743,
-            "output_tokens": 248,
-            "latency_ms": 11260
+            "input_tokens": 885,
+            "output_tokens": 321,
+            "latency_ms": 15193
           },
           "cost_usd": 0.0
         },
@@ -1132,7 +1132,7 @@
           "tags": [
             "filesystem"
           ],
-          "run_id": "237609ee-b122-45a8-b9f6-3d6db1727afd",
+          "run_id": "cc230dc4-273d-4f41-a615-ae41806fd208",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1153,15 +1153,15 @@
           "new_high_findings": 0,
           "outcome_met": false,
           "outcome_detail": "validation failed: Validation failed: pytest: failed tests/test_app.py::test_append_audit_returns_the_log_path; pytest: 1 fewer passing test(s) than before the patch.",
-          "duration_ms": 13696,
+          "duration_ms": 13965,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 765,
-            "output_tokens": 266,
-            "latency_ms": 12030
+            "input_tokens": 901,
+            "output_tokens": 250,
+            "latency_ms": 12321
           },
           "cost_usd": 0.0
         },
@@ -1174,7 +1174,7 @@
             "crypto",
             "policy"
           ],
-          "run_id": "a1d0f666-a009-4700-89b1-d482fe9df8f4",
+          "run_id": "085cbb54-fca4-4c26-b063-0241abeac705",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1195,7 +1195,7 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported and correctly left for manual review",
-          "duration_ms": 165,
+          "duration_ms": 166,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
@@ -1215,7 +1215,7 @@
           "tags": [
             "xss"
           ],
-          "run_id": "05b6bc98-f8f2-4884-bd72-458824f3aff7",
+          "run_id": "a7582317-e6e3-4987-a7c7-8b4e86b9276d",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1236,15 +1236,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 6646,
+          "duration_ms": 6589,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 375,
-            "output_tokens": 113,
-            "latency_ms": 5488
+            "input_tokens": 374,
+            "output_tokens": 114,
+            "latency_ms": 5473
           },
           "cost_usd": 0.0
         },
@@ -1256,7 +1256,7 @@
           "tags": [
             "ssh"
           ],
-          "run_id": "68d4b2e0-9a43-4c2f-92f8-cfd0bb23da6c",
+          "run_id": "938b7956-0c53-49d3-8a44-89dc248e17ab",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1271,23 +1271,21 @@
           },
           "patch_generated": true,
           "patch_attempts": 2,
-          "validation_passed": false,
-          "validation_summary": "Patch did not resolve selected findings: B507 in app.py",
-          "residual_target_findings": [
-            "B507"
-          ],
+          "validation_passed": true,
+          "validation_summary": "All fixed validation checks passed. No tests were collected, so no tests ran.",
+          "residual_target_findings": [],
           "new_high_findings": 0,
-          "outcome_met": false,
-          "outcome_detail": "validation failed: Patch did not resolve selected findings: B507 in app.py",
-          "duration_ms": 14620,
+          "outcome_met": true,
+          "outcome_detail": "validated patch resolved the finding",
+          "duration_ms": 14952,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 769,
-            "output_tokens": 265,
-            "latency_ms": 12793
+            "input_tokens": 938,
+            "output_tokens": 262,
+            "latency_ms": 13159
           },
           "cost_usd": 0.0
         },
@@ -1300,7 +1298,7 @@
             "path-hijack",
             "subprocess"
           ],
-          "run_id": "4875e0d8-7b36-4302-a811-1ccd779be67e",
+          "run_id": "358d6980-e932-4fe4-a15e-b31b317988bc",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1323,15 +1321,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 10489,
+          "duration_ms": 10275,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 384,
+            "input_tokens": 383,
             "output_tokens": 225,
-            "latency_ms": 9334
+            "latency_ms": 9163
           },
           "cost_usd": 0.0
         },
@@ -1343,7 +1341,7 @@
           "tags": [
             "deserialisation"
           ],
-          "run_id": "5718b3d6-76e3-47e2-849c-a01ed9d218ff",
+          "run_id": "09a64c0f-269c-4143-b360-34d854801dd2",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1359,23 +1357,21 @@
           },
           "patch_generated": true,
           "patch_attempts": 2,
-          "validation_passed": false,
-          "validation_summary": "Patch did not resolve selected findings: B301 in app.py, B403 in app.py",
-          "residual_target_findings": [
-            "B301"
-          ],
+          "validation_passed": true,
+          "validation_summary": "All fixed validation checks passed.",
+          "residual_target_findings": [],
           "new_high_findings": 0,
-          "outcome_met": false,
-          "outcome_detail": "validation failed: Patch did not resolve selected findings: B301 in app.py, B403 in app.py",
-          "duration_ms": 24160,
+          "outcome_met": true,
+          "outcome_detail": "validated patch resolved the finding",
+          "duration_ms": 25586,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 950,
-            "output_tokens": 461,
-            "latency_ms": 21999
+            "input_tokens": 1124,
+            "output_tokens": 511,
+            "latency_ms": 23326
           },
           "cost_usd": 0.0
         },
@@ -1387,7 +1383,7 @@
           "tags": [
             "tls"
           ],
-          "run_id": "876bd78b-83c2-4ac6-8724-4ccbf7c5fad1",
+          "run_id": "9e1c8156-4982-477c-bcdd-593cd7d73957",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1408,15 +1404,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 7320,
+          "duration_ms": 7185,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 360,
-            "output_tokens": 125,
-            "latency_ms": 6071
+            "input_tokens": 359,
+            "output_tokens": 126,
+            "latency_ms": 6032
           },
           "cost_usd": 0.0
         },
@@ -1429,7 +1425,7 @@
             "command-injection",
             "subprocess"
           ],
-          "run_id": "91928ff5-2f35-4c95-b4fd-72f4acdcd001",
+          "run_id": "172b1d18-8d69-4aa8-9afa-0acb4e14fcd7",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1451,15 +1447,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 8553,
+          "duration_ms": 8292,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 439,
-            "output_tokens": 175,
-            "latency_ms": 7356
+            "input_tokens": 438,
+            "output_tokens": 174,
+            "latency_ms": 7124
           },
           "cost_usd": 0.0
         },
@@ -1471,7 +1467,7 @@
           "tags": [
             "error-handling"
           ],
-          "run_id": "6f18ceee-3341-4fc7-acc3-a486a9829dca",
+          "run_id": "b040b545-66d9-4b84-893e-15eab9f78348",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1492,15 +1488,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 5982,
+          "duration_ms": 6699,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 358,
-            "output_tokens": 115,
-            "latency_ms": 4817
+            "input_tokens": 357,
+            "output_tokens": 116,
+            "latency_ms": 5572
           },
           "cost_usd": 0.0
         },
@@ -1512,7 +1508,7 @@
           "tags": [
             "sql-injection"
           ],
-          "run_id": "d313e7f1-add5-4373-a8f5-880498ca8a23",
+          "run_id": "0a63334c-3421-4714-9de4-5ac29ad17497",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1533,15 +1529,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 8497,
+          "duration_ms": 9224,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 371,
-            "output_tokens": 176,
-            "latency_ms": 7301
+            "input_tokens": 370,
+            "output_tokens": 198,
+            "latency_ms": 8098
           },
           "cost_usd": 0.0
         },
@@ -1553,7 +1549,7 @@
           "tags": [
             "tls"
           ],
-          "run_id": "16fc4382-6037-49e1-a900-51c991e7be03",
+          "run_id": "e118b146-ffca-43ab-8a61-cfa9e47cb139",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1574,15 +1570,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 6154,
+          "duration_ms": 6743,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 355,
-            "output_tokens": 116,
-            "latency_ms": 4921
+            "input_tokens": 354,
+            "output_tokens": 117,
+            "latency_ms": 5607
           },
           "cost_usd": 0.0
         },
@@ -1594,7 +1590,7 @@
           "tags": [
             "crypto"
           ],
-          "run_id": "cca30383-51b5-4fc9-b85f-2e9eb63b7eba",
+          "run_id": "df8c4c3e-9246-4bf6-b493-d26072981613",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1615,15 +1611,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 6984,
+          "duration_ms": 7011,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 343,
-            "output_tokens": 134,
-            "latency_ms": 5787
+            "input_tokens": 342,
+            "output_tokens": 135,
+            "latency_ms": 5855
           },
           "cost_usd": 0.0
         },
@@ -1635,7 +1631,7 @@
           "tags": [
             "xxe"
           ],
-          "run_id": "61eb1d20-522d-4504-95c3-504683b2f52a",
+          "run_id": "81782705-7a70-4f48-8c62-445df8377308",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1657,15 +1653,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "finding reported; remediation is out of scope for this case",
-          "duration_ms": 20943,
+          "duration_ms": 20985,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
-            "calls": 3,
+            "calls": 2,
             "failed_calls": 0,
-            "input_tokens": 913,
-            "output_tokens": 422,
-            "latency_ms": 18820
+            "input_tokens": 1074,
+            "output_tokens": 425,
+            "latency_ms": 19166
           },
           "cost_usd": 0.0
         },
@@ -1677,7 +1673,7 @@
           "tags": [
             "deserialisation"
           ],
-          "run_id": "514458ad-3377-4d24-bd4a-361f9757e767",
+          "run_id": "8f313acd-8e78-41fb-8773-5a864ae70f5a",
           "run_status": "completed",
           "error": null,
           "detected_rules": [
@@ -1698,15 +1694,15 @@
           "new_high_findings": 0,
           "outcome_met": true,
           "outcome_detail": "validated patch resolved the finding",
-          "duration_ms": 7093,
+          "duration_ms": 7160,
           "llm_usage": {
             "provider": "ollama",
             "model": "qwen2.5-coder:14b",
             "calls": 1,
             "failed_calls": 0,
-            "input_tokens": 351,
-            "output_tokens": 122,
-            "latency_ms": 5949
+            "input_tokens": 350,
+            "output_tokens": 127,
+            "latency_ms": 6056
           },
           "cost_usd": 0.0
         }
@@ -1722,8 +1718,8 @@
         "recall": 1.0,
         "f1": 1.0,
         "fix_cases": 16,
-        "fix_successes": 11,
-        "fix_rate": 0.6875,
+        "fix_successes": 14,
+        "fix_rate": 0.875,
         "patch_attempted_cases": 17,
         "patch_applied_cases": 17,
         "patch_validity_rate": 1.0,
@@ -1731,15 +1727,15 @@
         "policy_cases": 2,
         "policy_successes": 2,
         "regressions": 0,
-        "outcomes_met": 15,
-        "outcome_rate": 0.75,
-        "total_duration_ms": 180648,
-        "median_duration_ms": 7206,
-        "p95_duration_ms": 20943,
-        "llm_calls": 29,
+        "outcomes_met": 18,
+        "outcome_rate": 0.9,
+        "total_duration_ms": 191175,
+        "median_duration_ms": 7172,
+        "p95_duration_ms": 20985,
+        "llm_calls": 23,
         "failed_llm_calls": 0,
-        "input_tokens": 8925,
-        "output_tokens": 3448,
+        "input_tokens": 9818,
+        "output_tokens": 3619,
         "cost_usd": 0.0
       }
     }

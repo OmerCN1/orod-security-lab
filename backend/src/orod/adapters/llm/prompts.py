@@ -58,7 +58,7 @@ def build_patch_prompt(
     return (
         f"Repository summary: {snapshot.summary}\n"
         f"Findings:\n{finding_text}\n"
-        f"Previous validation error: {previous_error or 'none'}\n\n"
+        f"Previous attempt: {previous_error or 'none'}\n\n"
         f"{review_section}"
         f"{sources}"
     )

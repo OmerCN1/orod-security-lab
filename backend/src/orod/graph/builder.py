@@ -43,6 +43,42 @@ def scanner_failure_detail(exc: Exception) -> str:
     return type(exc).__name__
 
 
+MAX_PREVIOUS_DIFF_CHARS = 4_000
+
+
+def describe_previous_attempt(
+    previous_patch: dict[str, Any] | None,
+    validation: dict[str, Any] | None,
+    regenerating: bool,
+) -> str | None:
+    """What the model needs to know about the attempt that was just discarded.
+
+    Every attempt starts from the base revision, so without this the model cannot tell
+    that its earlier change is gone and tends to repeat it - fixing the same finding
+    again and missing the one validation reported.
+    """
+    summary = str((validation or {}).get("summary") or "")
+    passed = bool((validation or {}).get("passed"))
+    if not previous_patch:
+        # A rejected proposal: only the reason is known. A passing validation is not an
+        # error to repair.
+        return summary or None if not passed else None
+    diff = str(previous_patch.get("unified_diff") or "")[:MAX_PREVIOUS_DIFF_CHARS]
+    reason = (
+        "It passed validation, but the reviewer asked for a different patch."
+        if passed or regenerating
+        else f"Validation rejected it: {summary}"
+    )
+    return (
+        f"{reason}\n"
+        "That attempt was discarded, so every file below is back at its original "
+        "content. It changed:\n"
+        f"<previous_patch>\n{diff}\n</previous_patch>\n"
+        "This attempt must resolve every listed finding, not only the ones the "
+        "discarded attempt addressed."
+    )
+
+
 def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
     async def emit(
         state: TeamState,
@@ -287,10 +323,11 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 snapshot, str(previous_patch.get("unified_diff") or "")
             )
             await mutate_run(state, patch=None)
+            # A `run` event, not `patch`: the dashboard counts patch events as attempts.
             await emit(
                 state,
                 "developer",
-                EventType.PATCH,
+                EventType.RUN,
                 f"Previous patch reverted; attempt {attempt} starts from the base revision",
                 payload={"attempt": attempt, "reverted": True},
             )
@@ -328,8 +365,9 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             {item.file_path for item in chosen if item.file_path and item.file_path.endswith(".py")}
         )
         sources = await services.repository.read_files(snapshot, paths)
-        previous_validation = state.get("validation") or {}
-        previous_error = str(previous_validation.get("summary") or "") or None
+        previous_error = describe_previous_attempt(
+            previous_patch, state.get("validation"), bool(state.get("reviewer_feedback"))
+        )
         reviewer_feedback = state.get("reviewer_feedback") or None
         provider = services.llms.for_model(state.get("model"))
         proposal = await provider.propose_patch(
@@ -457,8 +495,9 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                     result.summary = f"Post-patch dependency check failed: {dependency_error}"
                 elif residual_targets:
                     result.passed = False
+                    # Two scanners can report one rule in one file; name it once.
                     residual_rules = ", ".join(
-                        sorted(f"{rule_id} in {path}" for _, rule_id, path in residual_targets)
+                        sorted({f"{rule_id} in {path}" for _, rule_id, path in residual_targets})
                     )
                     result.summary = f"Patch did not resolve selected findings: {residual_rules}"
                 elif introduced:

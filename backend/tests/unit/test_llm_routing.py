@@ -155,3 +155,47 @@ async def test_reviewer_feedback_reaches_the_model(tmp_path: Path) -> None:
     )
 
     assert primary.last_feedback == "use an ORM instead of a bound parameter"
+
+
+PARTIAL_PATH_SOURCE = (
+    "import subprocess\n\n\n"
+    "def run(value: str) -> None:\n"
+    "    subprocess.run(\n"
+    '        ["echo", value],\n'
+    "        shell=True,\n"
+    "    )\n"
+)
+
+
+async def test_a_repair_goes_back_to_the_model_when_the_codemod_covers_only_some_findings(
+    tmp_path: Path,
+) -> None:
+    # Attempts start from the base revision. The B607 codemod alone would bring back the
+    # shell=True the model's first attempt had removed, so the model must repair it.
+    primary = RecordingProvider()
+    router = RoutingLLMProvider(primary, DeterministicDemoPatchProvider(), use_llm=True)
+
+    patch = await router.propose_patch(
+        make_snapshot(tmp_path, "demo://vulnerable-python"),
+        [make_finding("B602"), make_finding("B607", Severity.LOW)],
+        {"app.py": PARTIAL_PATH_SOURCE},
+        previous_error="Patch did not resolve selected findings: B607 in app.py",
+    )
+
+    assert primary.calls == 1
+    assert patch is not None and patch.explanation == "recorded"
+
+
+async def test_a_repair_uses_the_codemod_when_it_covers_every_finding(tmp_path: Path) -> None:
+    primary = RecordingProvider()
+    router = RoutingLLMProvider(primary, DeterministicDemoPatchProvider(), use_llm=True)
+
+    patch = await router.propose_patch(
+        make_snapshot(tmp_path, "demo://partial-executable-path"),
+        [make_finding("B607", Severity.LOW)],
+        {"app.py": PARTIAL_PATH_SOURCE},
+        previous_error="Patch did not resolve selected findings: B607 in app.py",
+    )
+
+    assert primary.calls == 0
+    assert patch is not None and "shutil.which" in patch.unified_diff

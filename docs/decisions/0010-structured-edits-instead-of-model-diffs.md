@@ -32,7 +32,14 @@ left unmatched are now matched again by source, rule and file.
 Measured with `qwen2.5-coder:14b` on the same corpus and code otherwise: auto-fix 1/16 to
 11/16, patch validity 6% to 100%, rejected diffs 16 to 0, model calls 50 to 29, median
 run 22.7 s to 7.0 s, detection and policy unchanged, zero regressions. The remaining five
-failures are wrong fixes that validation refused, not format errors. The result does
+failures were wrong fixes that validation refused, not format errors.
+
+Repairs then had to change with it. Each attempt starts from the base revision (ADR
+0007), so the B607 codemod that used to answer every repair discarded the model's
+earlier, partly correct fix. The codemod now answers a repair only when it covers every
+selected finding, and the model is told that its previous attempt was discarded, what it
+changed and why validation refused it. That raised the same model to 14/16 with zero
+regressions; the two remaining failures are again wrong fixes that validation refused. The result does
 not show that a model's fixes are correct; validation and review still decide that.
 
 Edits must reproduce indentation exactly, and CRLF files remain unpatchable because the

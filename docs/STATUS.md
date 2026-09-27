@@ -6,6 +6,19 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Repairs no longer undo the model's own fix. Because every attempt starts from the base
+  revision, the B607 codemod used on a repair brought `shell=True` back on the demo
+  repository, and the model never got a second attempt. The codemod now steps in only
+  when it covers every selected finding (and never on a reviewer regeneration), and the
+  model is told that its previous attempt was discarded, what it changed and what
+  validation reported. A passing patch being regenerated is no longer described to the
+  model as a validation error. `qwen2.5-coder:14b` on the corpus: auto-fix 11/16 -> 14/16,
+  zero regressions, deterministic baseline unchanged; published.
+- An untrusted run no longer spends a repair attempt: without consent validation refuses
+  every patch. The "previous patch reverted" event is a `run` event, so the dashboard no
+  longer counts it as an attempt, and a residual finding reported by two scanners is
+  named once in the validation summary.
+
 - Models return search/replace edits instead of unified diffs (ADR 0010). The developer
   node applies them to the full workspace files - not the possibly truncated prompt
   excerpt - and renders the diff itself; a missing or ambiguous excerpt rejects the
@@ -207,10 +220,9 @@ Phase 9 — Agent-centred dashboard
   other packages require an operator-maintained image. Hidden config, symlinks, binary
   and oversized files are deliberately excluded from its input copy. Isolation covers
   validation, not the entire host-side analysis pipeline.
-- `qwen2.5-coder:14b` still fails 5 of 16 fix cases, each refused by validation rather
-  than published: two edits use a module without importing it (`ast`, `os`), one breaks a
-  test, one swaps `AutoAddPolicy` for the equally insecure `WarningPolicy`, and one leaves
-  the pickle findings in place. These are fix-quality failures, not format failures.
+- `qwen2.5-coder:14b` still fails 2 of 16 fix cases, both refused by validation rather
+  than published: in `hardcoded-password` it imports `os` in the wrong scope, and in
+  `hardcoded-tmp-path` its fix breaks an existing test. These are fix-quality failures.
 - No Anthropic suite has been recorded; no credential is configured on this machine.
 - The corpus is hermetic by design, so the OSV dependency path is exercised by integration
   tests but not by the evaluation corpus.
@@ -227,6 +239,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Repair routing and context: `uv run --no-sync pytest -q` — 265 passed, 1 opt-in Docker
+  test skipped. A real `qwen2.5-coder:14b` run of `demo://vulnerable-python` failed with
+  B607 unresolved before the change and passed validation on attempt 2 after it.
+  `make eval-publish MODELS="--model qwen2.5-coder:14b"` — qwen 14/16, reproduced twice.
 - Structured edits: `uv run --no-sync pytest -q` — 258 passed, 1 opt-in Docker test
   skipped; Ruff and strict mypy (73 source files) passed. `npm test -- --run` — 42
   passed; `tsc -b --noEmit` passed.

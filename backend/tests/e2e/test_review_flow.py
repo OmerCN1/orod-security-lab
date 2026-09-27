@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,14 @@ def test_regeneration_returns_to_the_developer_and_asks_again(tmp_path: Path) ->
         wait_for_status(client, run_id, "completed")
         events = client.get(f"/api/v1/runs/{run_id}/events", headers={"Last-Event-ID": "0"}).text
         assert "Previous patch reverted" in events
+        # The dashboard counts `patch` events as attempts; the revert must not be one.
+        emitted = [
+            json.loads(line[len("data:") :])
+            for line in events.splitlines()
+            if line.startswith("data:")
+        ]
+        reverted = next(item for item in emitted if "Previous patch reverted" in item["message"])
+        assert reverted["event_type"] == "run"
 
 
 def test_review_endpoint_rejects_decisions_for_runs_that_are_not_paused(tmp_path: Path) -> None:

@@ -16,7 +16,8 @@ class RoutingLLMProvider:
     model configured the model is always asked first - including for ``demo://``
     fixture repositories, so the evaluation harness measures the model rather than the
     fallback. Deterministic Bandit codemods only step in as a repair attempt after the
-    model has already produced a patch that validation rejected.
+    model has already produced a patch that validation rejected, and only when they cover
+    every selected finding.
     """
 
     def __init__(
@@ -52,7 +53,10 @@ class RoutingLLMProvider:
             return await self._bandit_fallback.propose_patch(
                 snapshot, findings, source_files, previous_error, reviewer_feedback
             )
-        if previous_error:
+        # Every attempt starts from the base revision, so a codemod that covers only some
+        # of the findings would undo the rest of the model's earlier fix. It steps in on a
+        # repair only when it can resolve every selected finding on its own.
+        if previous_error and not reviewer_feedback and self._bandit_fallback.covers(findings):
             fallback = await self._bandit_fallback.propose_patch(
                 snapshot, findings, source_files, previous_error, reviewer_feedback
             )

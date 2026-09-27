@@ -15,7 +15,7 @@ real agent pipeline; detection, remediation, policy compliance, latency and cost
 | Model | Detection F1 | Recall | Precision | Auto-fix rate | Patch validity | Policy | Regressions | Median run | Tokens | Cost |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `deterministic-baseline` | 1.00 | 100% | 100% | 6% (1/16) | 12% | 2/2 | 0 | 0.6s | 0 | $0.00 |
-| `qwen2.5-coder:14b` | 1.00 | 100% | 100% | 69% (11/16) | 100% | 2/2 | 0 | 7.2s | 12,373 | $0.00 |
+| `qwen2.5-coder:14b` | 1.00 | 100% | 100% | 88% (14/16) | 100% | 2/2 | 0 | 7.2s | 13,437 | $0.00 |
 
 <!-- EVAL_TABLE_END -->
 

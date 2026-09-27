@@ -53,6 +53,18 @@ def test_validation_keeps_the_repair_budget_then_hands_off_to_review() -> None:
     )
 
 
+def test_an_untrusted_run_does_not_spend_a_repair_attempt() -> None:
+    # Validation refuses every patch without consent; regenerating cannot change that.
+    state = {
+        "trusted": False,
+        "patch": {"unified_diff": "x"},
+        "validation": {"passed": False},
+        "attempt": 1,
+    }
+    assert after_validation(state) == "review"  # type: ignore[arg-type]
+    assert after_validation({**state, "trusted": True}) == "developer"  # type: ignore[arg-type]
+
+
 def test_review_applies_the_decision() -> None:
     passed = {"validation": {"passed": True}}
     assert after_review({**passed, "review_decision": "approve"}) == "publish"

@@ -151,6 +151,13 @@ class DeterministicBanditPatchProvider(UsageRecorder):
 
     provider_name = "deterministic"
 
+    @staticmethod
+    def covers(findings: list[Finding]) -> bool:
+        """Whether this codemod alone can resolve every one of ``findings``."""
+        return bool(findings) and all(
+            item.rule_id == "B607" and item.file_path and item.line for item in findings
+        )
+
     async def propose_patch(
         self,
         snapshot: RepositorySnapshot,

@@ -40,6 +40,9 @@ def after_validation(state: TeamState) -> Literal["developer", "review"]:
         return "review"
     if validation.get("passed"):
         return "review"
+    if state.get("trusted") is False:
+        # Without consent validation refuses every patch; another attempt cannot help.
+        return "review"
     if int(state.get("attempt", 0)) < 2:
         return "developer"
     return "review"
