@@ -34,9 +34,11 @@ the same comparison for its regression metric.
 ## Consequences
 
 A second attempt no longer sees the first attempt's edits; it receives the base sources and
-the previous validation error. A patch that re-edits a line carrying an unselected high
-finding counts that finding as new and fails closed; today every high finding is
-selected, so the residual check would reject that patch anyway.
+the previous validation error.
+
+Amended with ADR 0010: findings left unmatched by line text are matched a second time by
+source, rule and file, so a flagged line the patch edited without fixing counts as
+unresolved - which the residual check reports - rather than as introduced.
 
 The residual check still covers code findings only, because dependency remediation is not
 automated: including OSV there would fail every patch in a repository with a vulnerable

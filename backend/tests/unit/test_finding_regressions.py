@@ -92,3 +92,33 @@ def test_dependency_advisories_are_matched_by_advisory_and_manifest() -> None:
     introduced = introduced_high_risk_findings([known], [known, added], {}, {})
 
     assert [item.rule_id for item in introduced] == ["GHSA-new"]
+
+
+def test_a_flagged_line_edited_without_being_fixed_is_unresolved_not_introduced() -> None:
+    # From the corpus: a model swapped AutoAddPolicy for WarningPolicy. B507 still fires on
+    # the edited line; the residual check reports it, so it is not also a regression.
+    before_source = "client.set_missing_host_key_policy(paramiko.AutoAddPolicy())\n"
+    after_source = "client.set_missing_host_key_policy(paramiko.WarningPolicy())\n"
+
+    introduced = introduced_high_risk_findings(
+        [finding("B507", 1)],
+        [finding("B507", 1)],
+        {"app.py": before_source},
+        {"app.py": after_source},
+    )
+
+    assert introduced == []
+
+
+def test_an_unresolved_finding_does_not_hide_an_extra_one_of_the_same_rule() -> None:
+    before_source = "a = eval(x)\n"
+    after_source = "a = eval(y)\nb = eval(z)\n"
+
+    introduced = introduced_high_risk_findings(
+        [finding("B307", 1)],
+        [finding("B307", 1), finding("B307", 2)],
+        {"app.py": before_source},
+        {"app.py": after_source},
+    )
+
+    assert len(introduced) == 1

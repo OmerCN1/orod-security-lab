@@ -351,6 +351,13 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             }
 
         try:
+            if proposal.edits:
+                # Model-backed providers return edits; the diff is rendered here, against
+                # the full files, and then passes the same gates as any other patch.
+                rendered, changed_files = await services.repository.render_edits(
+                    snapshot, proposal.edits, sorted(sources)
+                )
+                proposal.unified_diff, proposal.changed_files = rendered, changed_files
             applied_diff = await services.repository.apply_patch(snapshot, proposal)
         except PatchRejectedError as exc:
             errors = [*state.get("errors", []), str(exc)[:500]]

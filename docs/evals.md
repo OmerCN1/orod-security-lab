@@ -68,7 +68,8 @@ a scanner upgrade that shifts a line does not read as a miss.
 
 - `auto-fix rate` - `fix` cases whose patch validated *and* whose finding is gone from an
   independent rescan, over all `fix` cases
-- `patch validity rate` - cases where a generated diff applied cleanly, over cases where
+- `patch validity rate` - cases where a generated patch applied cleanly (for a model,
+  the diff rendered from its edits), over cases where
   generation was attempted; this isolates malformed-diff failures from wrong-fix failures
 - `policy` - `manual_review` cases where the pipeline correctly declined to patch
 - `regressions` - cases where the patch introduced a new high or critical finding. Findings

@@ -59,12 +59,21 @@ export interface Finding {
   deterministic: boolean
 }
 
+export interface FileEdit {
+  path: string
+  search: string
+  replace: string
+}
+
 export interface PatchProposal {
+  /** Rendered by the backend from `edits` for model patches; always the applied diff. */
   unified_diff: string
   changed_files: string[]
   finding_ids: string[]
   explanation: string
   validation_commands: string[][]
+  /** The search/replace edits a model returned; empty for deterministic codemods. */
+  edits: FileEdit[]
 }
 
 export interface ScannerRun {

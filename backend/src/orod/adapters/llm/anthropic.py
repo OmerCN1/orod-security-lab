@@ -3,9 +3,13 @@ from __future__ import annotations
 import anthropic
 from anthropic import AsyncAnthropic
 
-from orod.adapters.llm.prompts import PATCH_SYSTEM_PROMPT, build_patch_prompt
+from orod.adapters.llm.prompts import (
+    PATCH_SYSTEM_PROMPT,
+    build_patch_prompt,
+    to_patch_proposal,
+)
 from orod.adapters.llm.usage import UsageRecorder
-from orod.domain.models import Finding, PatchProposal, RepositorySnapshot
+from orod.domain.models import EditProposal, Finding, PatchProposal, RepositorySnapshot
 
 # Hosted models this adapter is wired for. Keep in step with the pricing table the
 # evaluation harness uses to report cost.
@@ -19,8 +23,8 @@ SUPPORTED_MODELS: tuple[str, ...] = (
 class AnthropicLLMProvider(UsageRecorder):
     """Claude-backed patch generation behind the same port as the local model.
 
-    Structured outputs are used so the response is a validated ``PatchProposal``
-    rather than free text that would have to be scraped for a diff.
+    Structured outputs are used so the response is a validated ``EditProposal``
+    rather than free text; the diff is rendered from its edits by the application.
     """
 
     provider_name = "anthropic"
@@ -76,7 +80,7 @@ class AnthropicLLMProvider(UsageRecorder):
                 max_tokens=self._max_output_tokens,
                 system=PATCH_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
-                output_format=PatchProposal,
+                output_format=EditProposal,
             )
             counters["input_tokens"] = int(response.usage.input_tokens or 0)
             counters["output_tokens"] = int(response.usage.output_tokens or 0)
@@ -87,6 +91,6 @@ class AnthropicLLMProvider(UsageRecorder):
             parsed = response.parsed_output
         if parsed is None:
             return None
-        if isinstance(parsed, PatchProposal):
-            return parsed
-        return PatchProposal.model_validate(parsed)
+        return to_patch_proposal(
+            parsed if isinstance(parsed, EditProposal) else EditProposal.model_validate(parsed)
+        )

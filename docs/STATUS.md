@@ -6,6 +6,20 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Models return search/replace edits instead of unified diffs (ADR 0010). The developer
+  node applies them to the full workspace files - not the possibly truncated prompt
+  excerpt - and renders the diff itself; a missing or ambiguous excerpt rejects the
+  proposal, and the rendered diff passes every existing gate. Measured on the corpus with
+  `qwen2.5-coder:14b`, same code otherwise: auto-fix 1/16 -> 11/16, patch validity
+  6% -> 100%, rejected diffs 16 -> 0, model calls 50 -> 29, median run 22.7 s -> 7.0 s,
+  detection and policy unchanged, zero regressions. The deterministic baseline is
+  unchanged. Published to `docs/evals/latest.*` and the README table.
+- The new-high-finding comparison now matches in two passes - flagged-line text, then
+  source/rule/file - so a flagged line the patch edited without fixing counts as
+  unresolved rather than also as a regression. Found through the corpus: the model
+  swapped `AutoAddPolicy` for the equally insecure `WarningPolicy`; validation already
+  refused the patch, but the report counted one regression.
+
 - Baseline-aware validation (ADR 0009). compileall, Ruff `F` and pytest run on the base
   revision before the first attempt and again after each patch; a check fails only when
   the patch adds a failing file, diagnostic or test, or loses passing tests. Pre-existing
@@ -163,14 +177,13 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
-- Replace unified-diff generation with structured edit operations (search/replace blocks
-  or AST-level edits) and re-run `make eval` to measure the before/after. The corpus makes
-  this a measurement rather than a claim.
-- Record the model suites and publish the comparison table:
-  `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`.
-  Requires a running Ollama with `qwen2.5-coder:14b` pulled and/or `OROD_ANTHROPIC_API_KEY`;
-  neither was available when the harness was built, so only the baseline row is published.
-- Add a recorded OSV fixture so dependency-advisory remediation joins the corpus.
+- Dependency remediation: give the developer the manifest/lockfile for selected OSV
+  findings, propose the smallest version outside the affected ranges, and include OSV in
+  the residual check once a patch can resolve it. Pair it with a recorded OSV fixture so
+  the corpus measures it.
+- Record an Anthropic suite next to the published qwen row:
+  `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`; it needs
+  `OROD_ANTHROPIC_API_KEY`, which is not configured on this machine.
 - Review host-side clone/parsing/scanning boundaries before accepting arbitrary hostile
   third-party repositories. Validation isolation is implemented and tested; exercise an
   operator-built dependency image on a representative trusted GitHub repository next.
@@ -194,13 +207,10 @@ Phase 9 — Agent-centred dashboard
   other packages require an operator-maintained image. Hidden config, symlinks, binary
   and oversized files are deliberately excluded from its input copy. Isolation covers
   validation, not the entire host-side analysis pipeline.
-- **`qwen2.5-coder:14b` cannot emit a usable unified diff.** Over the 20-case corpus it
-  matched the deterministic baseline exactly (auto-fix 1/16) and contributed nothing: 15 of
-  16 fix cases ended with `git apply` rejecting the diff as corrupt, and the one success was
-  the AST codemod on the second attempt. 50 model calls produced zero exceptions, zero
-  schema violations and zero timeouts - the model returns a well-formed `PatchProposal`
-  whose `unified_diff` field is not valid diff syntax. This is a format problem, not a
-  capability problem, and it is the single highest-value thing to fix next.
+- `qwen2.5-coder:14b` still fails 5 of 16 fix cases, each refused by validation rather
+  than published: two edits use a module without importing it (`ast`, `os`), one breaks a
+  test, one swaps `AutoAddPolicy` for the equally insecure `WarningPolicy`, and one leaves
+  the pickle findings in place. These are fix-quality failures, not format failures.
 - No Anthropic suite has been recorded; no credential is configured on this machine.
 - The corpus is hermetic by design, so the OSV dependency path is exercised by integration
   tests but not by the evaluation corpus.
@@ -212,11 +222,16 @@ Phase 9 — Agent-centred dashboard
   width; there is no narrow-viewport layout.
 - A Starlette deprecation warning recommends future TestClient migration from `httpx` to `httpx2`.
 - External Semgrep rules and live OSV access require network availability; deterministic scanners continue.
-- General LLM-generated unified diffs can still be malformed; supported rules use deterministic fallback
-  codemods, while unsupported invalid patches are safely rejected after two attempts.
+- Edits must copy indentation exactly; only trailing whitespace is forgiven. Files with
+  CRLF line endings cannot be patched, because the diff parser rejects carriage returns.
 
 ## Last Verified Commands
 
+- Structured edits: `uv run --no-sync pytest -q` — 258 passed, 1 opt-in Docker test
+  skipped; Ruff and strict mypy (73 source files) passed. `npm test -- --run` — 42
+  passed; `tsc -b --noEmit` passed.
+- `python -m evals run --model qwen2.5-coder:14b` before the change (commit `cbdff93`) and
+  after it, then `make eval-publish MODELS="--model qwen2.5-coder:14b"`: see Completed.
 - Baseline-aware validation and scan completeness: `uv run --no-sync pytest -q` — 235
   passed, 1 opt-in Docker test skipped. After `make validation-image`,
   `OROD_TEST_CONTAINER=1 ... tests/integration/test_container_runtime.py` — 1 passed.

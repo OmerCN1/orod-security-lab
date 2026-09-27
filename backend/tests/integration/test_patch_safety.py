@@ -6,7 +6,7 @@ from orod.adapters.execution.subprocess import SafeCommandRunner
 from orod.adapters.repository.git import GitRepositoryAdapter
 from orod.config import Settings
 from orod.domain.errors import PatchRejectedError, WorkspaceIntegrityError
-from orod.domain.models import PatchProposal, RepositorySnapshot
+from orod.domain.models import FileEdit, PatchProposal, RepositorySnapshot
 
 
 def edit(path: str, before: str = "value = 1", after: str = "value = 2") -> str:
@@ -241,3 +241,60 @@ async def test_revert_refuses_a_workspace_that_changed_after_the_patch(
     with pytest.raises(WorkspaceIntegrityError, match="changed after the patch"):
         await adapter.revert_patch(snapshot, applied)
     assert (root / "app.py").read_text() == "value = 2\n"
+
+
+def edit_proposal(*edits: FileEdit) -> PatchProposal:
+    return PatchProposal(
+        unified_diff="",
+        changed_files=sorted({item.path for item in edits}),
+        finding_ids=[],
+        explanation="Test",
+        edits=list(edits),
+    )
+
+
+async def test_rendered_edits_apply_through_the_normal_gates(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    (root / "app.py").write_text("import os\nvalue = 1")  # no final newline
+    await commit_baseline(root)
+    patch = edit_proposal(FileEdit(path="app.py", search="value = 1", replace="value = 2"))
+
+    patch.unified_diff, patch.changed_files = await adapter.render_edits(
+        snapshot, patch.edits, ["app.py"]
+    )
+    applied = await adapter.apply_patch(snapshot, patch)
+
+    assert (root / "app.py").read_text() == "import os\nvalue = 2"
+    assert "+value = 2\n\\ No newline at end of file" in applied
+
+
+async def test_edits_are_applied_to_the_full_file_not_the_prompt_excerpt(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path],
+) -> None:
+    adapter, snapshot, root = repository
+    tail = "".join(f"line_{index} = {index}\n" for index in range(200))
+    (root / "app.py").write_text("value = 1\n" + tail)
+    await commit_baseline(root)
+
+    diff, changed = await adapter.render_edits(
+        snapshot, [FileEdit(path="app.py", search="value = 1", replace="value = 2")], ["app.py"]
+    )
+
+    # Rendering from a truncated excerpt would have deleted the unseen tail.
+    assert changed == ["app.py"]
+    assert "-line_199" not in diff
+
+
+@pytest.mark.parametrize("path", ["other.py", ".env"])
+async def test_edits_outside_the_supplied_safe_files_are_rejected(
+    repository: tuple[GitRepositoryAdapter, RepositorySnapshot, Path], path: str
+) -> None:
+    adapter, snapshot, root = repository
+    allowed = ["app.py", ".env"]  # .env is still refused by the file policy
+    with pytest.raises(PatchRejectedError, match="not supplied|unsafe edit target"):
+        await adapter.render_edits(
+            snapshot, [FileEdit(path=path, search="value = 1", replace="value = 2")], allowed
+        )
+    assert (root / path).read_text() == "value = 1\n"

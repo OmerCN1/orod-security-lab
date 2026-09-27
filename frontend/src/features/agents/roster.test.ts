@@ -239,6 +239,7 @@ describe('buildRoster', () => {
           finding_ids: [],
           explanation: 'x',
           validation_commands: [],
+          edits: [],
         },
       }),
       [

@@ -9,6 +9,7 @@ import tomllib
 from itertools import islice
 from pathlib import Path
 
+from orod.adapters.repository.edits import apply_edits, render_diff
 from orod.adapters.repository.files import RepositoryFiles
 from orod.adapters.repository.patches import WORKING_DIFF_ARGV, patch_targets
 from orod.adapters.repository.validation_checks import (
@@ -29,6 +30,7 @@ from orod.domain.models import (
     DEMO_REPOSITORY_RE,
     CheckOutcome,
     CommandResult,
+    FileEdit,
     FileEntry,
     PackageDependency,
     PatchProposal,
@@ -223,6 +225,28 @@ class GitRepositoryAdapter:
         if not diff.strip():
             raise PatchRejectedError("patch produced no repository changes")
         return diff
+
+    async def render_edits(
+        self, snapshot: RepositorySnapshot, edits: list[FileEdit], allowed_paths: list[str]
+    ) -> tuple[str, list[str]]:
+        """Render model edits as a unified diff against the full workspace files.
+
+        The model may have seen truncated sources, so the edits are applied to the files
+        as they are on disk, read under the shared file policy. Only files the model was
+        given may be edited. Returns the diff and the files it changes.
+        """
+        reader = self._files(Path(snapshot.workspace_path))
+        allowed = set(allowed_paths)
+        originals: dict[str, str] = {}
+        for path in sorted({edit.path for edit in edits}):
+            if path not in allowed:
+                raise PatchRejectedError("edit targets a file that was not supplied")
+            try:
+                originals[path] = reader.read(path).content
+            except UnsafePathError as exc:
+                raise PatchRejectedError(f"unsafe edit target: {exc}") from exc
+        changed = apply_edits(originals, edits)
+        return render_diff(originals, changed), sorted(changed)
 
     async def revert_patch(self, snapshot: RepositorySnapshot, applied_diff: str) -> None:
         """Return the workspace to its base revision by reversing a patch OROD applied.

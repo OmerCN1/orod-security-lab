@@ -4,7 +4,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from orod.adapters.llm.prompts import to_patch_proposal
+from orod.adapters.llm.usage import UsageRecorder
 from orod.config import Settings
+from orod.domain.models import EditProposal, FileEdit, PatchProposal
 from orod.main import create_app
 
 
@@ -136,3 +139,64 @@ def test_event_replay_honours_an_explicit_zero_last_event_id(tmp_path: Path) -> 
         )
         # No header: the query cursor applies.
         assert event_count(f"/api/v1/runs/{run_id}/events?after=4") == everything - 4
+
+
+def test_model_edits_reach_the_workspace_through_the_graph(tmp_path: Path) -> None:
+    """A model's search/replace edits are rendered, gated, applied and validated."""
+    settings = Settings(
+        database_path=tmp_path / "orod.sqlite3",
+        checkpoint_path=tmp_path / "checkpoints.sqlite3",
+        chroma_path=tmp_path / "chroma",
+        workspace_root=tmp_path / "workspaces",
+        use_llm=True,
+        require_human_approval=False,
+        enable_external_scanners=False,
+        enable_github_publish=False,
+        command_timeout_seconds=30,
+        event_poll_interval_seconds=0.01,
+    )
+
+    class EditingModel(UsageRecorder):
+        provider_name = "fake"
+
+        async def health(self) -> tuple[bool, str]:
+            return True, "ready"
+
+        async def propose_patch(self, *args: object, **kwargs: object) -> PatchProposal | None:
+            self.record()
+            return to_patch_proposal(
+                EditProposal(
+                    # Trailing whitespace drift, as models produce it; indentation is exact.
+                    edits=[
+                        FileEdit(
+                            path="app.py",
+                            search='        ["echo", value],  ',
+                            replace='        ["/bin/echo", value],',
+                        ),
+                        FileEdit(path="app.py", search="shell=True", replace="shell=False"),
+                    ],
+                    finding_ids=[],
+                    explanation="Removed the shell and used an absolute executable path.",
+                )
+            )
+
+    with TestClient(create_app(settings)) as client:
+        registry = client.app.state.llm_registry  # type: ignore[attr-defined]
+        registry.default()._primary = EditingModel("fake")  # noqa: SLF001
+        run_id = client.post(
+            "/api/v1/runs", json={"repository_url": "demo://vulnerable-python", "trusted": True}
+        ).json()["id"]
+        deadline = time.monotonic() + 30
+        payload = client.get(f"/api/v1/runs/{run_id}").json()
+        while payload["status"] in {"queued", "running"} and time.monotonic() < deadline:
+            time.sleep(0.1)
+            payload = client.get(f"/api/v1/runs/{run_id}").json()
+
+        assert payload["status"] == "completed", payload
+        assert payload["validation"]["passed"] is True, payload["validation"]["summary"]
+        assert len(payload["patch"]["edits"]) == 2
+        assert "+        shell=False," in payload["patch"]["unified_diff"]
+        content = client.get(
+            f"/api/v1/runs/{run_id}/files/content", params={"path": "app.py"}
+        ).json()["content"]
+        assert '["/bin/echo", value]' in content and "shell=False" in content

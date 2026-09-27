@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orod.domain.models import (
+    FileEdit,
     PackageDependency,
     PatchProposal,
     RepositorySnapshot,
@@ -29,6 +30,10 @@ class RepositoryProvider(Protocol):
     ) -> dict[str, str]: ...
 
     async def apply_patch(self, snapshot: RepositorySnapshot, patch: PatchProposal) -> str: ...
+
+    async def render_edits(
+        self, snapshot: RepositorySnapshot, edits: list[FileEdit], allowed_paths: list[str]
+    ) -> tuple[str, list[str]]: ...
 
     async def revert_patch(self, snapshot: RepositorySnapshot, applied_diff: str) -> None: ...
 

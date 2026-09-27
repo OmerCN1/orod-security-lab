@@ -16,6 +16,11 @@ React --REST/SSE--> FastAPI --> RunCoordinator --> LangGraph Team
 OSV package/version matching is authoritative. Vector similarity is used only
 to select compact advisory context for explanations and remediation prompts.
 
+Models return search/replace edits (`EditProposal`), never a diff. The developer node
+applies them to the full workspace files - not the possibly truncated prompt excerpt -
+and renders the unified diff itself; an excerpt that is missing or not unique rejects the
+proposal. The rendered diff then passes the same gates as a codemod's diff (ADR 0010).
+
 Every patch attempt - an automatic repair or a reviewer-requested regeneration - starts
 from the workspace's base revision: the previous attempt's recorded diff is reversed
 first, and a patch is refused on a workspace that still carries changes. The stored diff

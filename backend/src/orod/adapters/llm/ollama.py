@@ -8,9 +8,13 @@ import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 
-from orod.adapters.llm.prompts import PATCH_SYSTEM_PROMPT, build_patch_prompt
+from orod.adapters.llm.prompts import (
+    PATCH_SYSTEM_PROMPT,
+    build_patch_prompt,
+    to_patch_proposal,
+)
 from orod.adapters.llm.usage import UsageRecorder
-from orod.domain.models import Finding, PatchProposal, RepositorySnapshot
+from orod.domain.models import EditProposal, Finding, PatchProposal, RepositorySnapshot
 
 
 async def list_installed_models(base_url: str) -> list[str]:
@@ -64,7 +68,7 @@ class OllamaLLMProvider(UsageRecorder):
         if not findings or not source_files:
             return None
         structured = self._model.with_structured_output(
-            PatchProposal, method="json_schema", include_raw=True
+            EditProposal, method="json_schema", include_raw=True
         )
         prompt = build_patch_prompt(
             snapshot, findings, source_files, previous_error, reviewer_feedback
@@ -83,9 +87,9 @@ class OllamaLLMProvider(UsageRecorder):
         # failing the whole run.
         if parsed is None:
             return None
-        if isinstance(parsed, PatchProposal):
-            return parsed
-        return PatchProposal.model_validate(parsed)
+        return to_patch_proposal(
+            parsed if isinstance(parsed, EditProposal) else EditProposal.model_validate(parsed)
+        )
 
 
 class DeterministicDemoPatchProvider(UsageRecorder):

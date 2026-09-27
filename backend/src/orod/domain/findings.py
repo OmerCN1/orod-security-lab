@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 from orod.domain.models import Finding, FindingSource, Severity
 
@@ -37,27 +36,53 @@ def introduced_high_risk_findings(
     """High/critical findings in ``after`` that no finding in ``before`` accounts for.
 
     Comparing totals lets a patch that removes one high finding and adds another pass
-    as neutral, so findings are matched one-to-one by identity instead. Line numbers are
-    not part of the identity - a patch shifts every line below it - so the text of the
-    flagged line stands in for the location. When a file's text is unavailable the
-    identity degrades to source, rule and file, which still counts per file.
+    as neutral, so findings are matched one-to-one instead, in two passes:
+
+    1. By identity: source, rule, file and the text of the flagged line. Line numbers
+       are not part of it - a patch shifts every line below it.
+    2. What is left, by source, rule and file alone. This is a finding whose line the
+       patch edited without resolving it, e.g. one insecure host-key policy swapped for
+       another. It is unresolved, which the residual check reports, not introduced.
+
+    A second finding of a rule in a file that had one is still introduced, as is any
+    rule new to a file. When a file's text is unavailable, pass 1 degrades to pass 2.
 
     Both lists must come from the same set of scanners, or findings that were simply
     not rescanned read as fixed.
     """
-    available = Counter(
-        _identity(item, before_sources) for item in before if item.severity in HIGH_RISK_SEVERITIES
-    )
-    introduced: list[Finding] = []
+    remaining_before = [item for item in before if item.severity in HIGH_RISK_SEVERITIES]
+    remaining_after = [item for item in after if item.severity in HIGH_RISK_SEVERITIES]
+
+    def same_line(new: Finding, old: Finding) -> bool:
+        return _identity(new, after_sources) == _identity(old, before_sources)
+
+    def same_location(new: Finding, old: Finding) -> bool:
+        return _location(new) == _location(old)
+
+    for matches in (same_line, same_location):
+        remaining_after = _claim(remaining_after, remaining_before, matches)
+    return remaining_after
+
+
+def _claim(
+    after: list[Finding], before: list[Finding], matches: Callable[[Finding, Finding], bool]
+) -> list[Finding]:
+    """Pair each finding in ``after`` with one in ``before``; return those left unpaired.
+
+    Paired originals are removed from ``before``, so each accounts for one finding only.
+    """
+    unpaired: list[Finding] = []
     for item in after:
-        if item.severity not in HIGH_RISK_SEVERITIES:
-            continue
-        identity = _identity(item, after_sources)
-        if available[identity] > 0:
-            available[identity] -= 1
+        index = next((index for index, old in enumerate(before) if matches(item, old)), None)
+        if index is None:
+            unpaired.append(item)
         else:
-            introduced.append(item)
-    return introduced
+            del before[index]
+    return unpaired
+
+
+def _location(finding: Finding) -> tuple[str, str, str | None]:
+    return (finding.source.value, finding.rule_id, finding.file_path)
 
 
 def _identity(finding: Finding, sources: Mapping[str, str]) -> FindingIdentity:

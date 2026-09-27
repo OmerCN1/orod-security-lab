@@ -126,12 +126,40 @@ class Finding(BaseModel):
     deterministic: bool = True
 
 
+class FileEdit(BaseModel):
+    """Replace one exact excerpt of an existing file with new text."""
+
+    path: str = Field(description="Path of one of the supplied files, exactly as given.")
+    search: str = Field(
+        description=(
+            "Text copied verbatim from that file, including indentation, long enough to "
+            "occur exactly once in it."
+        )
+    )
+    replace: str = Field(description="The text that takes the place of `search`.")
+
+
+class EditProposal(BaseModel):
+    """What a model returns: edits to existing files, never a diff.
+
+    Models reliably copy and rewrite code but routinely emit unified diffs that do not
+    parse or apply, so the application renders the diff from these edits itself.
+    """
+
+    edits: list[FileEdit]
+    finding_ids: list[str]
+    explanation: str
+
+
 class PatchProposal(BaseModel):
     unified_diff: str
     changed_files: list[str]
     finding_ids: list[str]
     explanation: str
     validation_commands: list[list[str]] = Field(default_factory=list)
+    # Set by model-backed providers. The diff is rendered from them against the
+    # workspace before any safety gate runs; deterministic codemods supply a diff.
+    edits: list[FileEdit] = Field(default_factory=list)
 
 
 class CommandResult(BaseModel):
