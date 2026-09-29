@@ -100,24 +100,28 @@ class FakeScanner:
 
 
 class FakeAdvisories:
-    def __init__(self, complete: bool = True) -> None:
+    """``complete`` applies to every lookup; ``initial_complete`` only to the first one."""
+
+    def __init__(self, complete: bool = True, initial_complete: bool | None = None) -> None:
         self.complete = complete
+        self.initial_complete = complete if initial_complete is None else initial_complete
         self.queries: list[list[PackageDependency]] = []
 
     async def scan_dependencies(
         self, dependencies: list[PackageDependency]
     ) -> tuple[list[Finding], AdvisorySyncResult]:
+        complete = self.complete if self.queries else self.initial_complete
         self.queries.append(dependencies)
         advisory = "GHSA-new" if dependencies == [UPGRADED] else "GHSA-known"
         result = AdvisorySyncResult(
             queried_packages=len(dependencies),
             matched_advisories=1,
             cached_advisories=0,
-            errors=[] if self.complete else ["OSV query failed: ConnectError"],
-            complete=self.complete,
+            errors=[] if complete else ["OSV query failed: ConnectError"],
+            complete=complete,
         )
         found = [finding(advisory, FindingSource.OSV, "requirements.txt", None)]
-        return (found if self.complete else []), result
+        return (found if complete else []), result
 
 
 class FakeProvider:
@@ -212,12 +216,46 @@ async def test_an_incomplete_post_patch_osv_lookup_fails_closed(tmp_path: Path) 
         tmp_path,
         dependencies_after=[UPGRADED],
         scanner_swaps_rule=False,
-        advisories=FakeAdvisories(complete=False),
+        advisories=FakeAdvisories(complete=False, initial_complete=True),
     )
 
     assert record.validation is not None
     assert record.validation.passed is False
     assert record.validation.summary.startswith("Post-patch dependency check failed")
+    assert "ConnectError" in record.validation.summary
+
+
+async def test_changed_dependencies_are_refused_after_an_incomplete_initial_osv_lookup(
+    tmp_path: Path,
+) -> None:
+    # Every advisory for the new manifest would look introduced, even one the base
+    # revision already had, so the patch is refused rather than compared against nothing.
+    record, advisories = await run_graph(
+        tmp_path,
+        dependencies_after=[UPGRADED],
+        scanner_swaps_rule=False,
+        advisories=FakeAdvisories(complete=True, initial_complete=False),
+    )
+
+    assert record.validation is not None
+    assert record.validation.passed is False
+    assert "initial OSV lookup was incomplete" in record.validation.summary
+    assert advisories.queries == [[PINNED]]
+
+
+async def test_unchanged_dependencies_pass_after_an_incomplete_initial_osv_lookup(
+    tmp_path: Path,
+) -> None:
+    record, advisories = await run_graph(
+        tmp_path,
+        dependencies_after=[PINNED],
+        scanner_swaps_rule=False,
+        advisories=FakeAdvisories(complete=False),
+    )
+
+    assert record.validation is not None
+    assert record.validation.passed is True, record.validation.summary
+    assert advisories.queries == [[PINNED]]
 
 
 async def test_a_clean_patch_with_unchanged_dependencies_still_passes(tmp_path: Path) -> None:
@@ -284,3 +322,84 @@ async def test_a_scan_where_every_scanner_worked_is_complete(tmp_path: Path) -> 
     assert record.scan_complete is True
     assert [item.name for item in record.scanners] == ["fake", "osv"]
     assert all(item.ok for item in record.scanners)
+
+
+class RecoveringScanner:
+    """Fails the initial scan, then reports a high finding the base revision also had."""
+
+    name = "recovering"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def scan(self, snapshot: object) -> list[Finding]:
+        self.calls += 1
+        if self.calls == 1:
+            raise ScannerOutputError("semgrep could not download its rules")
+        return [finding("S999", FindingSource.SEMGREP, "app.py", 1)]
+
+
+class FailsAfterFirstScan:
+    name = "flaky"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def scan(self, snapshot: object) -> list[Finding]:
+        self.calls += 1
+        if self.calls > 1:
+            raise ScannerOutputError("Bandit returned invalid or truncated JSON")
+        return []
+
+
+async def test_a_scanner_that_failed_initially_does_not_block_a_clean_patch(
+    tmp_path: Path,
+) -> None:
+    # Before: the same scanner failing again after the patch failed validation, so a
+    # repository scanned with Semgrep offline could never pass.
+    record, _ = await run_graph(
+        tmp_path,
+        dependencies_after=[PINNED],
+        scanner_swaps_rule=False,
+        extra_scanners=(BrokenScanner(),),
+    )
+
+    assert record.validation is not None
+    assert record.validation.passed is True, record.validation.summary
+    assert "left out broken, which failed in the initial scan" in record.validation.summary
+    assert record.scan_complete is False
+
+
+async def test_a_scanner_that_recovers_after_the_patch_does_not_report_new_findings(
+    tmp_path: Path,
+) -> None:
+    # Before: its pre-existing S999 had no initial counterpart and failed validation as
+    # a new high finding.
+    scanner = RecoveringScanner()
+    record, _ = await run_graph(
+        tmp_path,
+        dependencies_after=[PINNED],
+        scanner_swaps_rule=False,
+        extra_scanners=(scanner,),
+    )
+
+    assert record.validation is not None
+    assert record.validation.passed is True, record.validation.summary
+    assert record.validation.new_high_findings == 0
+    assert scanner.calls == 1
+
+
+async def test_a_scanner_that_worked_initially_still_fails_closed_after_the_patch(
+    tmp_path: Path,
+) -> None:
+    record, _ = await run_graph(
+        tmp_path,
+        dependencies_after=[PINNED],
+        scanner_swaps_rule=False,
+        extra_scanners=(FailsAfterFirstScan(),),
+    )
+
+    assert record.validation is not None
+    assert record.validation.passed is False
+    assert record.validation.summary == "Post-patch security scan failed: flaky: ScannerOutputError"
+    assert record.scan_complete is True

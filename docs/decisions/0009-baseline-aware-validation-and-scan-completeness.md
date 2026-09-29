@@ -42,3 +42,15 @@ corpus median rose from 0.2 s to 0.5 s with unchanged scores. The validation ima
 entrypoint allowlist changed, so `make validation-image` must be re-run; an old image
 fails validation closed. A patch that fixes a pre-existing failure is not credited, only
 never penalised.
+
+## Addendum: the rescan uses the scanners that completed the initial scan
+
+The post-patch rescan first ran every configured scanner. One that had failed in the
+initial scan then either failed again, which refused every patch (Semgrep without
+network access), or worked, and every finding it reported had no original to match and
+counted as introduced. The rescan now skips scanners listed in `failed_scanners`, so both
+scans compare the same coverage; a passing validation summary names the scanners it left
+out, because the reviewer approves on that summary. A scanner that completed the initial
+scan and fails afterwards still fails validation. OSV follows the same rule: after an
+incomplete initial lookup, unchanged manifests reuse the (partial) original matches and
+changed manifests fail validation, since nothing complete exists to compare them with.

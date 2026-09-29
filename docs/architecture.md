@@ -27,7 +27,9 @@ first, and a patch is refused on a workspace that still carries changes. The sto
 is therefore exactly one attempt, and the publisher refuses to commit unless the working
 tree still equals that validated diff. Post-patch validation compares high/critical
 findings with the originals by identity (source, rule, file, flagged line text) across
-code scanners and OSV, so a patch cannot trade one high finding for another (ADR 0007).
+code scanners and OSV, so a patch cannot trade one high finding for another (ADR 0007). The
+rescan uses only the scanners that completed the initial scan, so both sides of the
+comparison have the same coverage (ADR 0009).
 
 Each run uses its UUID as the LangGraph `thread_id`. Application events have a
 monotonic per-run sequence and are persisted separately from graph checkpoints,

@@ -6,6 +6,15 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- The post-patch rescan uses only the scanners that completed the initial scan (ADR 0009
+  addendum). A scanner that failed initially used to fail validation again (a repository
+  scanned with Semgrep offline could never pass) or, once it worked, report all of its
+  findings as introduced. Skipped scanners are named in a passing validation summary; a
+  scanner that worked initially and fails afterwards still fails validation. After an
+  incomplete initial OSV lookup, changed manifests fail validation instead of being
+  compared with a partial baseline. Three of the five new tests fail against the previous
+  builder; the deterministic baseline is unchanged.
+
 - README rewritten: pipeline stage table, Mermaid architecture diagram with a module
   map, API endpoint and configuration tables, development commands, repository layout
   and current limitations. The eval table markers are unchanged, so `make eval-publish`
@@ -226,21 +235,20 @@ Phase 9 — Agent-centred dashboard
 
 ## Known Issues
 
-- The CI workflow has not run on GitHub yet; its steps were verified locally in a clean
-  copy. The Docker isolation test and model suites are not part of CI.
+- The Docker isolation test and model suites are not part of CI; CI runs the backend and
+  frontend jobs only (both green on GitHub since `55fbcc2`).
 - The dashboard relies on the Vite dev proxy for the API token; a production build
   served without it needs its own token handling.
 - The validation image's entrypoint allowlist changed with baseline-aware validation;
   run `make validation-image` again, or GitHub validation fails closed.
-- A post-patch scanner failure still fails validation even when the same scanner also
-  failed in the initial scan, so a repository scanned with Semgrep offline cannot pass.
 - Run control assumes a single backend process owns the database. Queued runs live in
   memory; after a restart they are failed as interrupted rather than resumed.
 - The post-patch residual check covers code findings only: dependency remediation is not
   automated, so OSV findings are still "selected" but can never be resolved by a patch.
   They do count toward the new-high-finding gate.
-- A scanner that was unavailable during the initial scan but works during the rescan
-  makes its findings look new, which fails validation closed.
+- A scanner that failed in the initial scan is left out of the post-patch rescan, so a
+  high finding only it would report is not caught; the scan is marked incomplete and the
+  validation summary names the scanner.
 - The default validation image only includes pytest, Ruff and Bandit; projects needing
   other packages require an operator-maintained image. Hidden config, symlinks, binary
   and oversized files are deliberately excluded from its input copy. Isolation covers
@@ -264,6 +272,10 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Rescan coverage: `uv run --no-sync pytest -q` — 288 passed, 1 opt-in Docker test
+  skipped; Ruff and strict mypy (76 source files) passed.
+  `python -m evals run --check-baseline ../docs/evals/latest.json` — baseline matches.
+  Frontend code was unchanged.
 - API access control, language check, CI: `uv run --no-sync pytest -q` — 283 passed,
   1 opt-in Docker test skipped; Ruff and strict mypy (76 source files) passed.
   `npm test -- --run` — 44 passed; lint and build passed. All CI steps also passed in a

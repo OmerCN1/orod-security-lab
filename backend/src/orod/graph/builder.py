@@ -116,7 +116,7 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
         await services.store.save_run(run)
 
     async def rescan_dependencies(
-        snapshot: RepositorySnapshot, original_findings: list[Finding]
+        snapshot: RepositorySnapshot, original_findings: list[Finding], initial_complete: bool
     ) -> tuple[list[Finding], str | None]:
         """Post-patch OSV findings, plus an error when they cannot be trusted as complete."""
         current = await services.repository.discover_dependencies(snapshot)
@@ -126,6 +126,13 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             # Unchanged manifests: the original package/version matches still hold,
             # and the rescan needs no network access.
             return [item for item in original_findings if item.source == FindingSource.OSV], None
+        if not initial_complete:
+            # Every advisory for the changed manifests would look new against an initial
+            # lookup that never finished, so there is nothing to compare them with.
+            return (
+                [],
+                "the initial OSV lookup was incomplete, so changed dependencies cannot be compared",
+            )
         findings, sync = await services.vulnerabilities.scan_dependencies(current)
         if not sync.complete:
             return findings, "; ".join(sync.errors[:3]) or "OSV lookup was incomplete"
@@ -504,9 +511,19 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                     for item in original_findings
                     if item.id in selected_ids and item.source != FindingSource.OSV
                 }
+                # The rescan is compared with the initial scan finding by finding, so it
+                # uses the scanners that completed it. A scanner that failed then has no
+                # findings to compare with: run again, a failure would block every patch
+                # and a success would make all of its findings look new.
+                initially_failed = set(state.get("failed_scanners", []))
+                excluded = [
+                    item.name for item in services.scanners if item.name in initially_failed
+                ]
                 raw_post_patch: list[Finding] = []
                 scanner_errors: list[str] = []
                 for scanner in services.scanners:
+                    if scanner.name in initially_failed:
+                        continue
                     try:
                         raw_post_patch.extend(await scanner.scan(snapshot))
                     except Exception as exc:
@@ -515,7 +532,7 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 # rescan must be too or a rule seen by two scanners looks like a new one.
                 post_patch_code_findings = deduplicate_findings(raw_post_patch)
                 dependency_findings, dependency_error = await rescan_dependencies(
-                    snapshot, original_findings
+                    snapshot, original_findings, initial_complete="osv" not in initially_failed
                 )
                 residual_targets = {
                     (item.source, item.rule_id, item.file_path) for item in post_patch_code_findings
@@ -554,6 +571,12 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                     )
                     result.summary = (
                         f"Patch introduced new high/critical security findings: {introduced_rules}"
+                    )
+                elif excluded:
+                    # The reviewer approves on this summary, so it names what was not checked.
+                    result.summary += (
+                        f" The post-patch scan left out {', '.join(excluded)}, which failed "
+                        "in the initial scan."
                     )
         await mutate_run(state, validation=result)
         await emit(
