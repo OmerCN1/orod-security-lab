@@ -38,6 +38,7 @@ class FakeRepository:
         self.version = "5.3.1"
         self.pending: str | None = None
         self.applied: list[PatchProposal] = []
+        self.failures_left = 0
 
     async def prepare(self, *args: object) -> RepositorySnapshot:
         return RepositorySnapshot(
@@ -82,6 +83,9 @@ class FakeRepository:
         return None
 
     async def validate(self, snapshot: object, baseline: object = None) -> ValidationResult:
+        if self.failures_left:
+            self.failures_left -= 1
+            return ValidationResult(passed=False, summary="Validation failed: ruff F821 app.py")
         return ValidationResult(passed=True, summary="All fixed validation commands passed.")
 
 
@@ -151,11 +155,13 @@ class CodeScanner:
 class RecordingProvider:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
+        self.previous_errors: list[object] = []
 
     async def propose_patch(
         self, snapshot: object, findings: list[Finding], *args: object
     ) -> PatchProposal:
         self.calls.append([item.rule_id for item in findings])
+        self.previous_errors.append(args[1] if len(args) > 1 else None)
         return PatchProposal(
             unified_diff=CODE_DIFF,
             changed_files=["app.py"],
@@ -178,10 +184,12 @@ async def run_graph(
     *,
     complete: bool = True,
     code_finding: bool = False,
+    validation_failures: int = 0,
 ) -> tuple[RunRecord, FakeRepository, FakeAdvisories, RecordingProvider]:
     store = SQLiteRunStore(tmp_path / "orod.sqlite3")
     await store.initialize()
     repository = FakeRepository(tmp_path)
+    repository.failures_left = validation_failures
     advisories = FakeAdvisories(table, complete)
     provider = RecordingProvider()
     services = AgentServices(
@@ -285,3 +293,18 @@ async def test_a_code_fix_and_a_pin_upgrade_form_one_patch(tmp_path: Path) -> No
     assert "+PyYAML==5.4\n" in record.patch.unified_diff
     assert record.patch.explanation.startswith("Disabled the shell. Upgraded PyYAML")
     assert len(repository.applied) == 1
+
+
+async def test_a_repair_after_a_combined_patch_never_shows_the_manifest(tmp_path: Path) -> None:
+    # Found on a live GitHub run: the repair prompt carried the pin change OROD made
+    # itself, the model edited requirements.txt, and every repair was rejected.
+    record, _, _, provider = await run_graph(
+        tmp_path, VULNERABLE, code_finding=True, validation_failures=1
+    )
+
+    assert provider.calls == [["B602"], ["B602"]]
+    repair_context = str(provider.previous_errors[1])
+    assert "+good" in repair_context
+    assert "requirements.txt" not in repair_context and "PyYAML" not in repair_context
+    assert record.validation is not None
+    assert record.validation.passed is True, record.validation.summary

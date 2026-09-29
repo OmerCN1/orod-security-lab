@@ -6,6 +6,19 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- A repair after a combined code and dependency patch no longer fails every time. The
+  repair prompt showed the model the whole previous diff, including the pin change OROD
+  makes itself; the model edited `requirements.txt`, which it was not given, and each
+  repair was rejected. The prompt now shows only the diff sections of the files the model
+  may edit (`orod.domain.diffs.split_by_file`). Found on the first live GitHub run; the
+  corpus has no case combining both, so the eval could not catch it.
+- First live end-to-end run since dependency remediation, against the private sandbox
+  `OmerCN1/orod-sandbox` (`eval` in `app.py`, `PyYAML==5.3.1`): live OSV found both
+  advisories with fixed version 5.4, the scan ran on the filtered copy, attempt 1 was
+  refused (the model left out `import ast`), the repair passed Docker validation with
+  tests run, and the approved patch opened draft PR #1 whose diff equals the validated
+  diff byte for byte; `main` was untouched.
+
 - External Bandit and Semgrep scans read a filtered copy of the workspace (ADR 0006
   addendum). `RepositoryFiles.copy_to` now builds both container validation input and
   scanner input; the copy sits beside the run workspace and is removed after the scan.
@@ -296,6 +309,11 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Repair context and live run: `uv run --no-sync pytest -q` — 309 passed, 1 opt-in Docker
+  test skipped; Ruff and strict mypy (80 source files) passed. `python -m evals run
+  --model qwen2.5-coder:14b --check-baseline ../docs/evals/latest.json` — baseline
+  matches, no outcome changed in either suite. After `make validation-image`,
+  `OROD_TEST_CONTAINER=1 ... tests/integration/test_container_runtime.py` — 1 passed.
 - Scanner input isolation: `uv run --no-sync pytest -q` — 305 passed, 1 opt-in Docker
   test skipped; Ruff and strict mypy (79 source files) passed.
   `python -m evals run --check-baseline ../docs/evals/latest.json` — baseline matches;

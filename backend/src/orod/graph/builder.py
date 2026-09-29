@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ from langgraph.types import interrupt
 from orod.agents.base import AgentServices
 from orod.application.finding_regressions import introduced_high_risk
 from orod.domain.dependencies import plan_upgrades
+from orod.domain.diffs import split_by_file
 from orod.domain.errors import (
     OrodError,
     PatchRejectedError,
@@ -58,12 +60,17 @@ def describe_previous_attempt(
     previous_patch: dict[str, Any] | None,
     validation: dict[str, Any] | None,
     regenerating: bool,
+    editable: Collection[str] | None = None,
 ) -> str | None:
     """What the model needs to know about the attempt that was just discarded.
 
     Every attempt starts from the base revision, so without this the model cannot tell
     that its earlier change is gone and tends to repeat it - fixing the same finding
     again and missing the one validation reported.
+
+    With ``editable``, only the diff sections of those files are shown. The rest - a
+    dependency pin change OROD made itself - is not the model's to repeat, and an edit
+    to a file it was not given rejects the whole proposal.
     """
     summary = str((validation or {}).get("summary") or "")
     passed = bool((validation or {}).get("passed"))
@@ -71,7 +78,13 @@ def describe_previous_attempt(
         # A rejected proposal: only the reason is known. A passing validation is not an
         # error to repair.
         return summary or None if not passed else None
-    diff = str(previous_patch.get("unified_diff") or "")[:MAX_PREVIOUS_DIFF_CHARS]
+    diff = str(previous_patch.get("unified_diff") or "")
+    if editable is not None:
+        allowed = set(editable)
+        diff = "".join(
+            section for path, section in split_by_file(diff).items() if path in allowed
+        )
+    diff = diff[:MAX_PREVIOUS_DIFF_CHARS] or "(none of the files below)"
     reason = (
         "It passed validation, but the reviewer asked for a different patch."
         if passed or regenerating
@@ -471,7 +484,10 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             )
             sources = await services.repository.read_files(snapshot, paths)
             previous_error = describe_previous_attempt(
-                previous_patch, state.get("validation"), bool(state.get("reviewer_feedback"))
+                previous_patch,
+                state.get("validation"),
+                bool(state.get("reviewer_feedback")),
+                editable=sources,
             )
             reviewer_feedback = state.get("reviewer_feedback") or None
             provider = services.llms.for_model(state.get("model"))
