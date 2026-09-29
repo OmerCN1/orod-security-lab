@@ -6,6 +6,11 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- README rewritten: pipeline stage table, Mermaid architecture diagram with a module
+  map, API endpoint and configuration tables, development commands, repository layout
+  and current limitations. The eval table markers are unchanged, so `make eval-publish`
+  still refreshes it.
+
 - Local API access control (ADR 0011). Non-loopback `Host` headers get 400, requests
   without the bearer token 401, and writes from a foreign `Origin` 403. The token comes
   from `OROD_API_TOKEN` or `data/api-token` (created once, mode 0600). The dashboard
