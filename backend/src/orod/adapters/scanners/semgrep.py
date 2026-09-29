@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
+from orod.adapters.scanners.isolated_input import filtered_copy
 from orod.domain.errors import ScannerOutputError
 from orod.domain.models import Confidence, Finding, FindingSource, RepositorySnapshot, Severity
 from orod.ports.execution import CommandRunner
@@ -13,19 +14,35 @@ from orod.ports.execution import CommandRunner
 class SemgrepScanner:
     name = "semgrep"
 
-    def __init__(self, runner: CommandRunner) -> None:
+    def __init__(
+        self,
+        runner: CommandRunner,
+        max_file_bytes: int = 1_000_000,
+        workspace_root: Path | None = None,
+    ) -> None:
         self._runner = runner
+        self._max_file_bytes = max_file_bytes
+        self._workspace_root = workspace_root
 
     async def scan(self, snapshot: RepositorySnapshot) -> list[Finding]:
         if snapshot.repository_url.startswith("demo://"):
             return []
-        root = Path(snapshot.workspace_path)
         semgrep_executable = str(Path(sys.executable).parent / "semgrep")
-        result = await self._runner.run(
-            [semgrep_executable, "scan", "--config", "p/python", "--json", "--metrics", "off", "."],
-            root,
-            max_output_chars=5_000_000,
-        )
+        with filtered_copy(snapshot, self._max_file_bytes, self._workspace_root) as root:
+            result = await self._runner.run(
+                [
+                    semgrep_executable,
+                    "scan",
+                    "--config",
+                    "p/python",
+                    "--json",
+                    "--metrics",
+                    "off",
+                    ".",
+                ],
+                root,
+                max_output_chars=5_000_000,
+            )
         if result.return_code != 0:
             raise ScannerOutputError(
                 f"Semgrep failed with exit code {result.return_code}: {result.stderr[-500:]}"

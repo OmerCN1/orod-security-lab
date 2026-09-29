@@ -82,10 +82,12 @@ def create_app(
         llm = llm_registry.default()
         scanners: list[SecurityScanner] = [
             BuiltinPythonScanner(configured.max_file_bytes, configured.workspace_root),
-            BanditScanner(runner),
+            BanditScanner(runner, configured.max_file_bytes, configured.workspace_root),
         ]
         if configured.enable_external_scanners:
-            scanners.append(SemgrepScanner(runner))
+            scanners.append(
+                SemgrepScanner(runner, configured.max_file_bytes, configured.workspace_root)
+            )
         publisher = GitHubCLIPublisher(runner)
 
         async with AsyncSqliteSaver.from_conn_string(

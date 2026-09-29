@@ -23,8 +23,11 @@ integrity of generated patches, and the developer's machine.
   to `changed_files`, and reject renames, adds/deletes, mode changes, binary targets,
   hidden paths and symlink components before invoking `git apply`.
 - Path traversal/symlink escape: repository inventory, dependency discovery, working
-  source reads, patch target validation, Python summaries, the built-in scanner and
-  container input copies share `RepositoryFiles`. Relative paths must be canonical;
+  source reads, patch target validation, Python summaries, the built-in scanner,
+  container input copies and the input of the external Bandit/Semgrep scanners share
+  `RepositoryFiles`. The external scanners walk a filtered temporary copy, never the
+  workspace, so they cannot follow a link out of it or read repository ignore files
+  such as `.semgrepignore`. Relative paths must be canonical;
   hidden/ignored paths and private-key filenames are excluded. Directory descriptors
   and `O_NOFOLLOW` reject symlink files and parent directories at open time, before
   resolution can hide the link. Only regular UTF-8 text files within the configured
@@ -46,7 +49,9 @@ integrity of generated patches, and the developer's machine.
 ## Remaining boundary
 
 Container isolation covers validation only. Host-side cloning, static parsers, network
-scanners and dependency discovery still handle untrusted repository data. This is not
+scanners and dependency discovery still handle untrusted repository data; the external
+scanners read only filtered input, but they run on the host. Inline suppression
+comments (`# nosec`, `# nosemgrep`) in repository code are still honoured. This is not
 a claim that arbitrary hostile repositories are fully sandboxed, and push-permission
 restrictions remain in place. Containers share the daemon host kernel; use a dedicated
 Docker VM/host for stronger isolation. Additional project dependencies belong in an

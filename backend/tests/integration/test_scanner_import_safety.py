@@ -7,13 +7,15 @@ from orod.domain.models import RepositorySnapshot
 
 
 async def test_scan_does_not_import_repository_bandit_module(tmp_path: Path) -> None:
-    (tmp_path / "bandit.py").write_text("raise RuntimeError('repository code executed')\n")
-    (tmp_path / "app.py").write_text("eval(input())\n")
+    repository = tmp_path / "run"
+    repository.mkdir()
+    (repository / "bandit.py").write_text("raise RuntimeError('repository code executed')\n")
+    (repository / "app.py").write_text("eval(input())\n")
     runner = SafeCommandRunner({sys.executable}, tmp_path)
-    findings = await BanditScanner(runner).scan(
+    findings = await BanditScanner(runner, workspace_root=tmp_path).scan(
         RepositorySnapshot(
             repository_url="https://github.com/example/project",
-            workspace_path=str(tmp_path),
+            workspace_path=str(repository),
             trusted=False,
         )
     )

@@ -100,15 +100,6 @@ class ContainerCommandRunner:
 
     def _copy_input(self, root: Path, destination: Path) -> None:
         """Never mount the original repo, credentials, symlinks or special files."""
-        total_bytes = 0
-        files = 0
-        reader = RepositoryFiles(root, self._settings.max_file_bytes, workspace_root=self._root)
-        for item in reader.iter_files():
-            total_bytes += item.size
-            files += 1
-            if total_bytes > 100_000_000 or files > 2_000:
-                raise CommandRejectedError("validation input exceeds workspace limits")
-            target = destination / item.relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(item.content.encode("utf-8"))
-            target.chmod(0o644)
+        RepositoryFiles(
+            root, self._settings.max_file_bytes, workspace_root=self._root
+        ).copy_to(destination)

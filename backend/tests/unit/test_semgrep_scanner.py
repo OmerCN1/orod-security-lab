@@ -16,12 +16,13 @@ class CapturingRunner:
 
 async def test_semgrep_uses_the_active_virtualenv_executable(tmp_path: Path) -> None:
     runner = CapturingRunner()
+    (tmp_path / "run").mkdir()
     snapshot = RepositorySnapshot(
         repository_url="https://github.com/example/python-project",
-        workspace_path=str(tmp_path),
+        workspace_path=str(tmp_path / "run"),
     )
 
-    findings = await SemgrepScanner(runner).scan(snapshot)
+    findings = await SemgrepScanner(runner, workspace_root=tmp_path).scan(snapshot)
 
     assert findings == []
     assert runner.argv is not None

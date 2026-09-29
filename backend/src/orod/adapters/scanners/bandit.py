@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
+from orod.adapters.scanners.isolated_input import filtered_copy
 from orod.domain.errors import ScannerOutputError
 from orod.domain.models import Confidence, Finding, FindingSource, RepositorySnapshot, Severity
 from orod.ports.execution import CommandRunner
@@ -24,16 +25,24 @@ REMEDIATIONS = {
 class BanditScanner:
     name = "bandit"
 
-    def __init__(self, runner: CommandRunner) -> None:
+    def __init__(
+        self,
+        runner: CommandRunner,
+        max_file_bytes: int = 1_000_000,
+        workspace_root: Path | None = None,
+    ) -> None:
         self._runner = runner
+        self._max_file_bytes = max_file_bytes
+        self._workspace_root = workspace_root
 
     async def scan(self, snapshot: RepositorySnapshot) -> list[Finding]:
-        root = Path(snapshot.workspace_path)
-        result = await self._runner.run(
-            [sys.executable, "-I", "-m", "bandit", "-r", ".", "-f", "json"],
-            root,
-            max_output_chars=5_000_000,
-        )
+        with filtered_copy(snapshot, self._max_file_bytes, self._workspace_root) as root:
+            result = await self._runner.run(
+                [sys.executable, "-I", "-m", "bandit", "-r", ".", "-f", "json"],
+                root,
+                max_output_chars=5_000_000,
+            )
+        # File names are relative to the copy, which mirrors the workspace layout.
         if result.return_code not in {0, 1}:
             raise ScannerOutputError(
                 f"Bandit failed with exit code {result.return_code}: {result.stderr[-500:]}"

@@ -41,9 +41,7 @@ fixtures, hidden config or symlinks can fail validation; the policy never relaxe
 to run their tests. Noncanonical source paths and unsafe direct file requests return
 HTTP 400. Deleted or currently unsafe working files cannot be fetched via `revision=base`.
 
-External Bandit/Semgrep processes still have their own file walkers. Extending shared
-input filtering to those tools and isolating the whole host-side pipeline remain
-separate work. This policy protects adapter reads; it is not a filesystem sandbox for
+Isolating the whole host-side pipeline remains separate work. This policy protects adapter reads; it is not a filesystem sandbox for
 arbitrary repository code or a transaction covering a later `git apply` invocation.
 
 ## Verification
@@ -54,3 +52,13 @@ growth after stat. All dependency manifest formats are covered, including `requi
 variants. Tests also cover unsafe Git blobs behind safe working files, fixture copying,
 stale inventory records, source summaries, the built-in scanner and container input.
 The deterministic corpus and opt-in live Docker test are re-run for this change.
+
+## Addendum: external scanner input
+
+Bandit and Semgrep walked the workspace themselves: Bandit read a file symlink pointing
+outside the workspace, hidden and ignored directories and files above the byte limit,
+and reported them at paths no patch may touch; Semgrep would honour a repository's
+`.semgrepignore`. Both now run in a temporary copy written by `RepositoryFiles.copy_to`,
+the same routine that builds container validation input, created beside the run
+workspace and removed after the scan. A repository beyond the copy limits (2,000 files
+or 100 MB) fails the scan, which marks it incomplete, instead of being scanned in part.

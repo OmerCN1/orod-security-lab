@@ -6,6 +6,14 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- External Bandit and Semgrep scans read a filtered copy of the workspace (ADR 0006
+  addendum). `RepositoryFiles.copy_to` now builds both container validation input and
+  scanner input; the copy sits beside the run workspace and is removed after the scan.
+  Run directly on the workspace, Bandit reported a file symlinked from outside it, a
+  hidden directory, `venv/` and an oversized file; now only accepted files are scanned,
+  and a repository's `.semgrepignore` no longer reaches Semgrep. A repository beyond the
+  copy limits fails the scan (incomplete) instead of being scanned in part.
+
 - Deterministic dependency remediation (ADR 0012). OSV findings carry the matched
   dependency and the advisory's fixed releases; one is selected only when a fixed release
   above the pin exists, the pin is in a root `requirements*.txt` or `pyproject.toml`, and
@@ -235,8 +243,9 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
-- Route external Bandit/Semgrep scans through the same filtered repository input;
-  their subprocess file walkers are not yet governed by the shared adapter reader.
+- Decide whether repository suppression comments (`# nosec`, `# nosemgrep`) should be
+  ignored (`bandit --ignore-nosec`, `semgrep --disable-nosem`): they let repository
+  content hide findings. Measure the corpus before and after.
 - Record an Anthropic suite next to the published qwen row:
   `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`; it needs
   `OROD_ANTHROPIC_API_KEY`, which is not configured on this machine.
@@ -287,6 +296,12 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Scanner input isolation: `uv run --no-sync pytest -q` — 305 passed, 1 opt-in Docker
+  test skipped; Ruff and strict mypy (79 source files) passed.
+  `python -m evals run --check-baseline ../docs/evals/latest.json` — baseline matches;
+  detected rules and outcomes identical for all 21 cases. Live Semgrep (`p/python`)
+  through the adapter reported `subprocess-shell-true` in a directory the repository's
+  `.semgrepignore` excluded, and left no copy behind.
 - Dependency remediation: `uv run --no-sync pytest -q` — 302 passed, 1 opt-in Docker
   test skipped; Ruff and strict mypy (78 source files) passed. `npm test -- --run` — 44
   passed; ESLint and `tsc -b --noEmit` passed.

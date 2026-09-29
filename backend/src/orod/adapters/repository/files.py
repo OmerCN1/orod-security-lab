@@ -16,6 +16,9 @@ IGNORED_PARTS = {"venv", "node_modules", "dist", "build", "__pycache__"}
 SECRET_NAMES = {"id_rsa", "id_ed25519", "id_dsa", "id_ecdsa"}
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 BINARY_CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0b\x0e-\x1f\x7f]")
+# An isolated copy stops here rather than silently leaving the rest of a repository out.
+COPY_MAX_FILES = 2_000
+COPY_MAX_BYTES = 100_000_000
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,25 @@ class RepositoryFiles:
         """List root-level names without following entries or opening their contents."""
         with self._root_directory() as descriptor:
             return sorted(os.listdir(descriptor))
+
+    def copy_to(self, destination: Path) -> None:
+        """Write every file this policy accepts under ``destination``.
+
+        A tool that walks a directory itself - a container's test run, an external
+        scanner - is given this copy instead of the workspace, so it never follows a
+        symlink or reads a hidden, binary or oversized file the policy rejects.
+        """
+        total_bytes = 0
+        files = 0
+        for item in self.iter_files():
+            total_bytes += item.size
+            files += 1
+            if total_bytes > COPY_MAX_BYTES or files > COPY_MAX_FILES:
+                raise UnsafePathError("repository exceeds the size limits of an isolated copy")
+            target = destination / item.relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(item.content.encode("utf-8"))
+            target.chmod(0o644)
 
     def iter_files(self) -> Iterator[RepositoryTextFile]:
         with self._root_directory() as descriptor:
