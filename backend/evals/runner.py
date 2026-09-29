@@ -24,6 +24,8 @@ from evals.metrics import (
     score_detection,
     score_outcome,
 )
+from evals.osv_replay import load_recordings, replay_transport
+from orod.adapters.scanners.osv import OSVVulnerabilityAdapter
 from orod.application.finding_regressions import introduced_high_risk
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
@@ -33,7 +35,7 @@ from orod.domain.models import Finding, FindingSource, RunCreate, RunRecord
 from orod.main import create_app
 from orod.ports.llm import LLMProvider
 from orod.ports.repository import RepositoryProvider
-from orod.ports.scanners import SecurityScanner
+from orod.ports.scanners import SecurityScanner, VulnerabilityProvider
 from orod.ports.storage import RunStore
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -45,8 +47,8 @@ def build_settings(workspace: Path, model: str, use_llm: bool, command_timeout: 
 
     Every stateful path is redirected into a scratch directory, external scanners and
     publishing are off, and the fixture root points at the corpus so ``demo://<case-id>``
-    resolves. The corpus declares no pinned dependencies, so the OSV adapter
-    short-circuits and the suite never touches the network.
+    resolves. OSV is answered from recordings (``evals/osv_replay.py``), so the suite
+    never touches the network.
     """
     return Settings(
         database_path=workspace / "orod.sqlite3",
@@ -70,9 +72,11 @@ def build_settings(workspace: Path, model: str, use_llm: bool, command_timeout: 
 
 
 @asynccontextmanager
-async def running_app(settings: Settings) -> AsyncIterator[FastAPI]:
+async def running_app(
+    settings: Settings, vulnerabilities: VulnerabilityProvider | None = None
+) -> AsyncIterator[FastAPI]:
     """Start the real application graph in-process, without the HTTP transport."""
-    app = create_app(settings)
+    app = create_app(settings, vulnerability_provider=vulnerabilities)
     async with app.router.lifespan_context(app):
         yield app
 
@@ -97,9 +101,11 @@ def _scanners(app: FastAPI) -> list[SecurityScanner]:
     return cast(list[SecurityScanner], app.state.scanners)
 
 
-async def _await_terminal_run(
-    app: FastAPI, run_id: str, timeout_seconds: float
-) -> RunRecord:
+def _vulnerabilities(app: FastAPI) -> VulnerabilityProvider:
+    return cast(VulnerabilityProvider, app.state.vulnerabilities)
+
+
+async def _await_terminal_run(app: FastAPI, run_id: str, timeout_seconds: float) -> RunRecord:
     store = _store(app)
     deadline = time.monotonic() + timeout_seconds
     while True:
@@ -136,7 +142,13 @@ async def _rescan(app: FastAPI, record: RunRecord) -> list[Finding]:
             findings.extend(await scanner.scan(snapshot))
         except Exception as exc:  # a broken rescan must not mask the run's own result
             print(f"  rescan skipped {scanner.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
-    return deduplicate_findings(findings)
+    dependencies = await _repository(app).discover_dependencies(snapshot)
+    advisories, sync = await _vulnerabilities(app).scan_dependencies(dependencies)
+    if not sync.complete:
+        # An incomplete lookup proves nothing was fixed; keep the original advisories.
+        print(f"  rescan OSV incomplete: {'; '.join(sync.errors[:2])}", file=sys.stderr)
+        advisories = [item for item in record.findings if item.source == FindingSource.OSV]
+    return [*deduplicate_findings(findings), *advisories]
 
 
 async def run_case(app: FastAPI, case: EvalCase, timeout_seconds: float) -> CaseResult:
@@ -187,10 +199,9 @@ async def run_case(app: FastAPI, case: EvalCase, timeout_seconds: float) -> Case
             {item.rule_id for item in case.expected_findings} & remaining
         )
     if record.repository is not None:
-        # The rescan runs code scanners only, so compare it with the code findings.
-        before = [item for item in record.findings if item.source != FindingSource.OSV]
+        # The rescan covers the code scanners and OSV, like the initial scan.
         introduced = await introduced_high_risk(
-            _repository(app), record.repository, before, post_patch, max_chars=1_000_000
+            _repository(app), record.repository, record.findings, post_patch, max_chars=1_000_000
         )
         result.new_high_findings = len(introduced)
 
@@ -226,8 +237,9 @@ async def run_suite(
     workspace.mkdir(parents=True)
 
     settings = build_settings(workspace, model, use_llm, command_timeout)
+    vulnerabilities = OSVVulnerabilityAdapter(transport=replay_transport(load_recordings(cases)))
     try:
-        async with running_app(settings) as app:
+        async with running_app(settings, vulnerabilities) as app:
             suite.provider = _llm(app).usage().provider
             try:
                 healthy, detail = await _llm(app).health()

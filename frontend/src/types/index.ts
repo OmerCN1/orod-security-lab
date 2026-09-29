@@ -57,6 +57,9 @@ export interface Finding {
   advisory_ids: string[]
   references: string[]
   deterministic: boolean
+  /** OSV findings only: the pinned dependency and the versions that fix the advisory. */
+  dependency: Dependency | null
+  fixed_versions: string[]
 }
 
 export interface FileEdit {

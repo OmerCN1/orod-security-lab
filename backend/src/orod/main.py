@@ -28,7 +28,7 @@ from orod.api.security import load_or_create_api_token, require_api_access
 from orod.application.run_analysis import RunCoordinator
 from orod.config import Settings
 from orod.graph.builder import build_security_team
-from orod.ports.scanners import SecurityScanner
+from orod.ports.scanners import SecurityScanner, VulnerabilityProvider
 
 
 def local_frontend_origins(configured_origin: str) -> list[str]:
@@ -44,7 +44,16 @@ def local_frontend_origins(configured_origin: str) -> list[str]:
     return origins
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    vulnerability_provider: VulnerabilityProvider | None = None,
+) -> FastAPI:
+    """Build the application.
+
+    ``vulnerability_provider`` replaces the live OSV adapter; only the evaluation harness
+    passes one, to replay recorded OSV responses.
+    """
     configured = settings or Settings()
 
     @asynccontextmanager
@@ -68,7 +77,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             configured.ollama_base_url,
             configured.embedding_model,
         )
-        vulnerabilities_adapter = OSVVulnerabilityAdapter(vector_store)
+        vulnerabilities_adapter = vulnerability_provider or OSVVulnerabilityAdapter(vector_store)
         llm_registry = CachingLLMProviderRegistry(configured)
         llm = llm_registry.default()
         scanners: list[SecurityScanner] = [

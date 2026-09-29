@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from orod.domain.models import (
+    DependencyUpgrade,
     FileEdit,
     PackageDependency,
     PatchProposal,
@@ -40,6 +41,10 @@ class RepositoryProvider(Protocol):
     async def discover_dependencies(
         self, snapshot: RepositorySnapshot
     ) -> list[PackageDependency]: ...
+
+    async def upgrade_dependencies(
+        self, snapshot: RepositorySnapshot, upgrades: list[DependencyUpgrade]
+    ) -> tuple[str, list[str]]: ...
 
     async def record_baseline(
         self, snapshot: RepositorySnapshot

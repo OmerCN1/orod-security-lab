@@ -16,6 +16,13 @@ React --REST/SSE--> FastAPI --> RunCoordinator --> LangGraph Team
 OSV package/version matching is authoritative. Vector similarity is used only
 to select compact advisory context for explanations and remediation prompts.
 
+Advisories are remediated deterministically: each OSV finding records the pinned
+dependency and the advisory's fixed releases, and the developer node moves every exact pin
+of the package in the root `requirements*.txt` and `pyproject.toml` to the smallest version
+that clears all of its selected advisories. Only code findings reach the patch provider;
+the manifest diff is appended to its patch. The post-patch OSV lookup decides whether the
+new version is actually clear (ADR 0012).
+
 Models return search/replace edits (`EditProposal`), never a diff. The developer node
 applies them to the full workspace files - not the possibly truncated prompt excerpt -
 and renders the unified diff itself; an excerpt that is missing or not unique rejects the

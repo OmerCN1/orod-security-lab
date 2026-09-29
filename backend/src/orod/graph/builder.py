@@ -8,6 +8,7 @@ from langgraph.types import interrupt
 
 from orod.agents.base import AgentServices
 from orod.application.finding_regressions import introduced_high_risk
+from orod.domain.dependencies import plan_upgrades
 from orod.domain.errors import (
     OrodError,
     PatchRejectedError,
@@ -18,6 +19,7 @@ from orod.domain.events import EventLevel, EventType, RunEvent
 from orod.domain.findings import deduplicate_findings
 from orod.domain.languages import PYTHON, profile_languages
 from orod.domain.models import (
+    DependencyUpgrade,
     Finding,
     FindingSource,
     PatchProposal,
@@ -137,6 +139,41 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
         if not sync.complete:
             return findings, "; ".join(sync.errors[:3]) or "OSV lookup was incomplete"
         return findings, None
+
+    async def with_dependency_upgrades(
+        snapshot: RepositorySnapshot,
+        proposal: PatchProposal | None,
+        upgrades: list[DependencyUpgrade],
+    ) -> PatchProposal:
+        """Add the manifest pin changes to the code patch, or make them the whole patch."""
+        diff, files = await services.repository.upgrade_dependencies(snapshot, upgrades)
+        if not files:
+            if proposal is None:
+                raise PatchRejectedError("no manifest pin matched the planned dependency upgrade")
+            return proposal
+        summary = "Upgraded " + "; ".join(
+            f"{item.name} {item.current_version} -> {item.target_version} "
+            f"({', '.join(item.advisory_ids)})"
+            for item in upgrades
+        )
+        finding_ids = [identifier for item in upgrades for identifier in item.finding_ids]
+        if proposal is None:
+            return PatchProposal(
+                unified_diff=diff,
+                changed_files=files,
+                finding_ids=finding_ids,
+                explanation=f"{summary}.",
+            )
+        if set(files) & set(proposal.changed_files):
+            raise PatchRejectedError("code patch and dependency upgrade edit the same file")
+        return proposal.model_copy(
+            update={
+                "unified_diff": proposal.unified_diff + diff,
+                "changed_files": [*proposal.changed_files, *files],
+                "finding_ids": [*proposal.finding_ids, *finding_ids],
+                "explanation": f"{proposal.explanation} {summary}.",
+            }
+        )
 
     async def architect(state: TeamState) -> dict[str, object]:
         await mutate_run(state, status=RunStatus.RUNNING, phase=RunPhase.ARCHITECT)
@@ -331,7 +368,14 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 "osv_errors": sync.errors[:5],
             },
         )
-        selected = [finding.id for finding in final_findings if is_actionable_finding(finding)]
+        # Advisories from an incomplete OSV lookup are reported but not remediated: the
+        # post-patch rescan would have no complete lookup to compare a new pin with.
+        selected = [
+            finding.id
+            for finding in final_findings
+            if is_actionable_finding(finding)
+            and (finding.source != FindingSource.OSV or sync.complete)
+        ]
         review_only = len(final_findings) - len(selected)
         await emit(
             state,
@@ -411,19 +455,30 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
         findings = [Finding.model_validate(value) for value in state.get("findings", [])]
         selected = set(state.get("selected_finding_ids", []))
         chosen = [item for item in findings if item.id in selected]
-        paths = sorted(
-            {item.file_path for item in chosen if item.file_path and item.file_path.endswith(".py")}
-        )
-        sources = await services.repository.read_files(snapshot, paths)
-        previous_error = describe_previous_attempt(
-            previous_patch, state.get("validation"), bool(state.get("reviewer_feedback"))
-        )
-        reviewer_feedback = state.get("reviewer_feedback") or None
-        provider = services.llms.for_model(state.get("model"))
-        proposal = await provider.propose_patch(
-            snapshot, chosen, sources, previous_error, reviewer_feedback
-        )
-        if proposal is None:
+        # Advisories are cleared by a deterministic pin change; only code findings go to
+        # the patch provider, which is never shown a manifest.
+        code_findings = [item for item in chosen if item.source != FindingSource.OSV]
+        upgrades = plan_upgrades(item for item in chosen if item.source == FindingSource.OSV)
+        proposal: PatchProposal | None = None
+        sources: dict[str, str] = {}
+        if code_findings:
+            paths = sorted(
+                {
+                    item.file_path
+                    for item in code_findings
+                    if item.file_path and item.file_path.endswith(".py")
+                }
+            )
+            sources = await services.repository.read_files(snapshot, paths)
+            previous_error = describe_previous_attempt(
+                previous_patch, state.get("validation"), bool(state.get("reviewer_feedback"))
+            )
+            reviewer_feedback = state.get("reviewer_feedback") or None
+            provider = services.llms.for_model(state.get("model"))
+            proposal = await provider.propose_patch(
+                snapshot, code_findings, sources, previous_error, reviewer_feedback
+            )
+        if proposal is None and not upgrades:
             await emit(
                 state,
                 "developer",
@@ -439,13 +494,16 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             }
 
         try:
-            if proposal.edits:
+            if proposal is not None and proposal.edits:
                 # Model-backed providers return edits; the diff is rendered here, against
                 # the full files, and then passes the same gates as any other patch.
                 rendered, changed_files = await services.repository.render_edits(
                     snapshot, proposal.edits, sorted(sources)
                 )
                 proposal.unified_diff, proposal.changed_files = rendered, changed_files
+            if upgrades:
+                proposal = await with_dependency_upgrades(snapshot, proposal, upgrades)
+            assert proposal is not None
             applied_diff = await services.repository.apply_patch(snapshot, proposal)
         except PatchRejectedError as exc:
             errors = [*state.get("errors", []), str(exc)[:500]]
@@ -471,7 +529,11 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
             "developer",
             EventType.PATCH,
             proposal.explanation,
-            payload={"changed_files": proposal.changed_files, "attempt": attempt},
+            payload={
+                "changed_files": proposal.changed_files,
+                "attempt": attempt,
+                "dependency_upgrades": [item.model_dump(mode="json") for item in upgrades],
+            },
         )
         await emit(
             state,
@@ -504,12 +566,10 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 original_findings = [
                     Finding.model_validate(value) for value in state.get("findings", [])
                 ]
-                # Dependency remediation is not automated yet, so the residual check
-                # covers code findings only; OSV findings still count as regressions.
                 selected_targets = {
                     (item.source, item.rule_id, item.file_path)
                     for item in original_findings
-                    if item.id in selected_ids and item.source != FindingSource.OSV
+                    if item.id in selected_ids
                 }
                 # The rescan is compared with the initial scan finding by finding, so it
                 # uses the scanners that completed it. A scanner that failed then has no
@@ -534,8 +594,11 @@ def build_security_team(services: AgentServices, checkpointer: Any) -> Any:
                 dependency_findings, dependency_error = await rescan_dependencies(
                     snapshot, original_findings, initial_complete="osv" not in initially_failed
                 )
+                # Selected advisories are resolved by a pin change, so the rescanned OSV
+                # matches take part in the residual check like the code findings.
                 residual_targets = {
-                    (item.source, item.rule_id, item.file_path) for item in post_patch_code_findings
+                    (item.source, item.rule_id, item.file_path)
+                    for item in [*post_patch_code_findings, *dependency_findings]
                 } & selected_targets
                 # The original findings include OSV, so the rescan must too; otherwise a
                 # vulnerable dependency hides a high finding the patch introduced.

@@ -89,15 +89,27 @@ is the guard: if a graph change breaks this, the corpus run stops finishing in s
 
 ## Why the corpus is hermetic
 
-No case declares a pinned dependency, so the OSV adapter short-circuits before any HTTP
-call; external scanners and GitHub publishing are disabled; every stateful path is
-redirected into a scratch directory that is deleted afterwards. A suite therefore produces
-the same numbers offline, in CI, and on a laptop - which is the only way two model runs
-are comparable.
+OSV is answered from recordings, external scanners and GitHub publishing are disabled,
+and every stateful path is redirected into a scratch directory that is deleted afterwards.
+A suite therefore produces the same numbers offline, in CI, and on a laptop - which is the
+only way two model runs are comparable.
 
-The cost of that choice is that dependency-advisory remediation (the OSV path) is **not**
-covered by the corpus. Adding it needs either a recorded OSV fixture or an accepted
-network dependency; it is the clearest next gap.
+A case that pins dependencies ships `osv.json` next to its `repo/`: the advisory ids OSV
+returned for each `name==version` and the advisories themselves. The harness replays them
+through the real OSV adapter, so the adapter's parsing and the dependency remediation path
+run exactly as they do against the live service (ADR 0012). A query the recording does not
+cover is answered like an outage: the lookup is incomplete and the patch fails closed. The
+harness's own post-run rescan checks OSV as well as the code scanners.
+
+Record every version the pipeline will query - the pin and the version it moves to:
+
+```bash
+cd backend
+uv run python -m evals record-osv vulnerable-dependency PyYAML==5.3.1 PyYAML==5.4
+```
+
+A recording is a snapshot of OSV on the day it was made. Re-recording can change a case's
+result; treat that like any other corpus change and explain it.
 
 ## Adding a case
 
@@ -109,8 +121,8 @@ network dependency; it is the clearest next gap.
    the one you intended.
 
 `tests/unit/test_eval_corpus.py` enforces the corpus invariants: unique ids, a `repo/`
-directory, a stated rationale, no pinned dependencies, and coverage of all four outcome
-kinds.
+directory, a stated rationale, a recorded OSV response for every pinned dependency, and
+coverage of all four outcome kinds.
 
 ## Model comparison validity
 

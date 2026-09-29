@@ -124,6 +124,10 @@ class Finding(BaseModel):
     references: list[str] = Field(default_factory=list)
     rag_context: list[str] = Field(default_factory=list)
     deterministic: bool = True
+    # OSV findings only: the pinned dependency the advisory matched, and the versions
+    # its affected ranges name as fixed for that package. Empty when no fix is known.
+    dependency: PackageDependency | None = None
+    fixed_versions: list[str] = Field(default_factory=list)
 
 
 class FileEdit(BaseModel):
@@ -160,6 +164,16 @@ class PatchProposal(BaseModel):
     # Set by model-backed providers. The diff is rendered from them against the
     # workspace before any safety gate runs; deterministic codemods supply a diff.
     edits: list[FileEdit] = Field(default_factory=list)
+
+
+class DependencyUpgrade(BaseModel):
+    """One pinned dependency moved to the version that clears every selected advisory."""
+
+    name: str
+    current_version: str
+    target_version: str
+    advisory_ids: list[str] = Field(default_factory=list)
+    finding_ids: list[str] = Field(default_factory=list)
 
 
 class CommandResult(BaseModel):

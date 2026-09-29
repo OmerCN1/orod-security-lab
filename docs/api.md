@@ -42,7 +42,14 @@ token from the file, e.g. `scripts/demo.sh`; in `/docs`, paste it into **Authori
   `scanners` (one `{name, ok, findings, detail}` entry per scanner, OSV included) and
   `scan_complete`, which is `false` when any scanner failed: an empty findings list is
   then not a clean result. A run in which every code scanner failed ends `failed`.
-- `GET /runs/{id}/patch` — patch and validation report.
+  OSV findings also carry `dependency` (the matched `{name, version, source_file,
+  ecosystem}`) and `fixed_versions` (the advisory's fixed releases for that package);
+  both are `null`/empty for code findings. An advisory is selected for remediation only
+  when a pin change can resolve it (ADR 0012).
+- `GET /runs/{id}/patch` — patch and validation report. A patch that upgrades pinned
+  dependencies names them in its `explanation`, and its `patch` event payload lists them
+  under `dependency_upgrades` (`name`, `current_version`, `target_version`,
+  `advisory_ids`, `finding_ids`).
 - `GET /runs/{id}/pull-request` — draft pull-request result.
 - `POST /runs/{id}/review` — submit a human decision; returns HTTP 202.
 - `POST /runs/{id}/cancel` — cancel a queued, running or paused run. A running run is

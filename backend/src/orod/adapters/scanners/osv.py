@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 
+from orod.domain.dependencies import normalize_name
 from orod.domain.models import (
     AdvisorySyncResult,
     Confidence,
@@ -19,8 +20,15 @@ from orod.ports.storage import VectorStore
 class OSVVulnerabilityAdapter:
     API_ROOT = "https://api.osv.dev/v1"
 
-    def __init__(self, vector_store: VectorStore | None = None) -> None:
+    def __init__(
+        self,
+        vector_store: VectorStore | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._vector_store = vector_store
+        # Injected only by the evaluation harness, which replays recorded OSV responses
+        # through the same parsing code instead of querying the live service.
+        self._transport = transport
 
     async def scan_dependencies(
         self, dependencies: list[PackageDependency]
@@ -47,7 +55,7 @@ class OSVVulnerabilityAdapter:
             }
             for dependency in versioned
         ]
-        async with httpx.AsyncClient(timeout=20.0) as client:
+        async with httpx.AsyncClient(timeout=20.0, transport=self._transport) as client:
             try:
                 response = await client.post(
                     f"{self.API_ROOT}/querybatch", json={"queries": queries}
@@ -122,7 +130,39 @@ class OSVVulnerabilityAdapter:
             remediation="Upgrade the dependency to a version outside the affected ranges.",
             advisory_ids=[advisory_id, *aliases],
             references=references,
+            dependency=dependency,
+            fixed_versions=self._fixed_versions(dependency, advisory),
         )
+
+    @staticmethod
+    def _fixed_versions(dependency: PackageDependency, advisory: dict[str, Any]) -> list[str]:
+        """Versions this advisory's version ranges name as fixed for the matched package.
+
+        GIT ranges name commits, not releases, so only ECOSYSTEM and SEMVER ranges count.
+        """
+        fixed: list[str] = []
+        for affected in advisory.get("affected") or []:
+            if not isinstance(affected, dict):
+                continue
+            package = affected.get("package") or {}
+            if (
+                not isinstance(package, dict)
+                or str(package.get("ecosystem") or "") != dependency.ecosystem
+                or normalize_name(str(package.get("name") or "")) != normalize_name(dependency.name)
+            ):
+                continue
+            for version_range in affected.get("ranges") or []:
+                if not isinstance(version_range, dict) or version_range.get("type") not in {
+                    "ECOSYSTEM",
+                    "SEMVER",
+                }:
+                    continue
+                for event in version_range.get("events") or []:
+                    if isinstance(event, dict) and event.get("fixed"):
+                        value = str(event["fixed"])
+                        if value not in fixed:
+                            fixed.append(value)
+        return fixed
 
     @staticmethod
     def _severity(advisory: dict[str, Any]) -> Severity:

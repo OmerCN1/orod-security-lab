@@ -9,13 +9,14 @@ from pathlib import Path
 from evals.gate import suite_drift
 from evals.manifest import CASES_ROOT, load_cases
 from evals.metrics import EvalReport
+from evals.osv_replay import record
 from evals.report import git_commit, publish, render_comparison_table, write_report
 from evals.runner import DEFAULT_CASE_TIMEOUT_SECONDS, run_suite
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parent
 BASELINE_LABEL = "deterministic-baseline"
-SCANNERS = ["builtin-python", "bandit"]
+SCANNERS = ["builtin-python", "bandit", "osv (recorded)"]
 
 
 def _progress(label: str, index: int, total: int, case_id: str) -> None:
@@ -102,6 +103,13 @@ def _list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _record_osv(args: argparse.Namespace) -> int:
+    load_cases(CASES_ROOT, [args.case])  # rejects an unknown case id
+    path = asyncio.run(record(args.case, args.pins))
+    print(f"wrote {path}", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m evals",
@@ -156,6 +164,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     listing = sub.add_parser("list", help="list the corpus")
     listing.set_defaults(handler=_list)
+
+    recording = sub.add_parser(
+        "record-osv",
+        help="record live OSV responses for a case's pinned dependencies (needs network)",
+    )
+    recording.add_argument("case", help="case id")
+    recording.add_argument(
+        "pins",
+        nargs="+",
+        metavar="NAME==VERSION",
+        help="every version the pipeline will query: the pins and the versions they move to",
+    )
+    recording.set_defaults(handler=_record_osv)
     return parser
 
 

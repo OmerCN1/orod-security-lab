@@ -6,6 +6,21 @@ Phase 9 — Agent-centred dashboard
 
 ## Completed
 
+- Deterministic dependency remediation (ADR 0012). OSV findings carry the matched
+  dependency and the advisory's fixed releases; one is selected only when a fixed release
+  above the pin exists, the pin is in a root `requirements*.txt` or `pyproject.toml`, and
+  the initial lookup was complete. The developer moves every exact pin of the package to
+  the smallest version clearing all of its selected advisories and appends that diff to
+  the code patch; the patch provider sees code findings only. The residual check includes
+  OSV again, and the post-patch lookup decides whether the new version is clear.
+- The corpus gained `vulnerable-dependency` (PyYAML 5.3.1, GHSA-8q59-q68h-6hv4). Its OSV
+  responses are recorded in `osv.json` by `python -m evals record-osv` and replayed
+  through the real adapter via a transport passed to `create_app`; an unrecorded query
+  fails closed. The harness's own rescan now covers OSV. Published: baseline auto-fix
+  1/16 -> 2/17, `qwen2.5-coder:14b` 14/16 -> 15/17, every other case unchanged, tokens
+  unchanged (the dependency fix uses no model). Dashboard finding cards show the pinned
+  version and its fixed releases.
+
 - The post-patch rescan uses only the scanners that completed the initial scan (ADR 0009
   addendum). A scanner that failed initially used to fail validation again (a repository
   scanned with Semgrep offline could never pass) or, once it worked, report all of its
@@ -220,18 +235,14 @@ Phase 9 — Agent-centred dashboard
 
 ## Next Exact Task
 
-- Dependency remediation: give the developer the manifest/lockfile for selected OSV
-  findings, propose the smallest version outside the affected ranges, and include OSV in
-  the residual check once a patch can resolve it. Pair it with a recorded OSV fixture so
-  the corpus measures it.
+- Route external Bandit/Semgrep scans through the same filtered repository input;
+  their subprocess file walkers are not yet governed by the shared adapter reader.
 - Record an Anthropic suite next to the published qwen row:
   `make eval-publish MODELS="--model qwen2.5-coder:14b --model claude-opus-5"`; it needs
   `OROD_ANTHROPIC_API_KEY`, which is not configured on this machine.
 - Review host-side clone/parsing/scanning boundaries before accepting arbitrary hostile
   third-party repositories. Validation isolation is implemented and tested; exercise an
   operator-built dependency image on a representative trusted GitHub repository next.
-- Route external Bandit/Semgrep scans through the same filtered repository input;
-  their subprocess file walkers are not yet governed by the shared adapter reader.
 
 ## Known Issues
 
@@ -243,9 +254,13 @@ Phase 9 — Agent-centred dashboard
   run `make validation-image` again, or GitHub validation fails closed.
 - Run control assumes a single backend process owns the database. Queued runs live in
   memory; after a restart they are failed as interrupted rather than resumed.
-- The post-patch residual check covers code findings only: dependency remediation is not
-  automated, so OSV findings are still "selected" but can never be resolved by a patch.
-  They do count toward the new-high-finding gate.
+- Dependency remediation covers exact `==` pins in root `requirements*.txt` and
+  `pyproject.toml`. Lockfiles (never edited), version ranges, pins with extras, nested
+  manifests and transitive dependencies are reported for manual review. The target is the
+  highest per-advisory fix, not a full range solve; a target inside another advisory's
+  later range is caught by the post-patch lookup and fails validation.
+- A pin upgrade is validated with the repository's own checks, which run without the
+  package installed, so a breaking API change in the new release is not detected.
 - A scanner that failed in the initial scan is left out of the post-patch rescan, so a
   high finding only it would report is not caught; the scan is marked incomplete and the
   validation summary names the scanner.
@@ -253,12 +268,12 @@ Phase 9 — Agent-centred dashboard
   other packages require an operator-maintained image. Hidden config, symlinks, binary
   and oversized files are deliberately excluded from its input copy. Isolation covers
   validation, not the entire host-side analysis pipeline.
-- `qwen2.5-coder:14b` still fails 2 of 16 fix cases, both refused by validation rather
+- `qwen2.5-coder:14b` still fails 2 of 17 fix cases, both refused by validation rather
   than published: in `hardcoded-password` it imports `os` in the wrong scope, and in
   `hardcoded-tmp-path` its fix breaks an existing test. These are fix-quality failures.
 - No Anthropic suite has been recorded; no credential is configured on this machine.
-- The corpus is hermetic by design, so the OSV dependency path is exercised by integration
-  tests but not by the evaluation corpus.
+- The corpus has one dependency case, and its OSV recording is a snapshot: re-recording
+  can change the result.
 - `pickle-untrusted-data`, `xml-entity-expansion` and `jinja2-autoescape-disabled` import
   third-party packages that are not installed in the fixture environment; they carry no
   regression tests, so those cases are validated by scanners alone.
@@ -272,6 +287,11 @@ Phase 9 — Agent-centred dashboard
 
 ## Last Verified Commands
 
+- Dependency remediation: `uv run --no-sync pytest -q` — 302 passed, 1 opt-in Docker
+  test skipped; Ruff and strict mypy (78 source files) passed. `npm test -- --run` — 44
+  passed; ESLint and `tsc -b --noEmit` passed.
+  `make eval-publish MODELS="--model qwen2.5-coder:14b"` — 21 cases; only
+  `vulnerable-dependency` changed (new, met by both suites).
 - Rescan coverage: `uv run --no-sync pytest -q` — 288 passed, 1 opt-in Docker test
   skipped; Ruff and strict mypy (76 source files) passed.
   `python -m evals run --check-baseline ../docs/evals/latest.json` — baseline matches.

@@ -47,6 +47,12 @@ export function FindingCard({ finding, owned }: { finding: Finding; owned: boole
               {finding.line ? `:${finding.line}` : ''}
             </span>
           )}
+          {finding.dependency && finding.fixed_versions.length > 0 && (
+            <span className="mono text-[11px]" style={{ color: 'var(--muted)' }}>
+              {finding.dependency.name} {finding.dependency.version} · fixed in{' '}
+              {finding.fixed_versions.join(', ')}
+            </span>
+          )}
           <span
             className="inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11px]"
             style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}

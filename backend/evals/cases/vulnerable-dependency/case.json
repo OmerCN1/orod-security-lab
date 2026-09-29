@@ -1,0 +1,20 @@
+{
+  "id": "vulnerable-dependency",
+  "title": "Dependency pinned to a release with a known critical advisory",
+  "cwe": "CWE-20",
+  "expected_outcome": "fix",
+  "expected_findings": [
+    {
+      "rule_id": "GHSA-8q59-q68h-6hv4",
+      "file_path": "requirements.txt",
+      "severity": "critical"
+    }
+  ],
+  "allowed_extra_rules": ["PYSEC-2021-142"],
+  "has_tests": false,
+  "tags": [
+    "dependency",
+    "osv"
+  ],
+  "rationale": "PyYAML 5.4 is the first release outside the advisory's affected range, and the recorded OSV response lists no advisory for it."
+}

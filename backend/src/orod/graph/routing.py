@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from orod.domain.dependencies import is_remediable
 from orod.domain.models import Finding, FindingSource, ReviewDecision, Severity
 from orod.graph.state import TeamState
 
@@ -11,6 +12,10 @@ MANUAL_REVIEW_LOW_BANDIT_RULES = {"B101", "B311", "B404", "B603"}
 def is_actionable_finding(finding: Finding) -> bool:
     if finding.severity == Severity.INFO:
         return False
+    if finding.source == FindingSource.OSV:
+        # Only a pin change resolves an advisory; one with no fixed release above the
+        # pin, or pinned only in a lockfile, is left for a human.
+        return is_remediable(finding)
     if (
         finding.severity == Severity.LOW
         and finding.source == FindingSource.BANDIT

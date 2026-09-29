@@ -17,6 +17,9 @@ never passes model output to a shell.
   code issues; dependencies are matched against OSV by exact package and version.
   Embeddings only pick advisory context for prompts; they never decide whether a package
   is vulnerable.
+- **Dependency upgrades from OSV data.** A vulnerable pin moves to the smallest release
+  that clears its advisories, taken from OSV's own fixed versions, and the post-patch OSV
+  lookup confirms it.
 - **Patches from structured edits.** The model returns search/replace edits, not diffs.
   OROD applies them to the real workspace files and renders the diff itself, so each
   proposal passes the same path, size and file-type checks.
@@ -25,7 +28,7 @@ never passes model output to a shell.
   adds a high or critical finding.
 - **A human decides.** The graph pauses before publishing. You approve, reject or ask for
   a new patch with feedback, and approval is refused for any patch that did not pass validation.
-- **Measured, not assumed.** A corpus of 20 controlled vulnerability cases goes through
+- **Measured, not assumed.** A corpus of 21 controlled vulnerability cases goes through
   the real pipeline, and CI fails if the deterministic result gets worse.
 
 ## How a run works
@@ -34,7 +37,7 @@ never passes model output to a shell.
 |---|---|---|
 | 1 | **Architect** | Clones or prepares the repository, builds a file inventory and stops a repository that contains no Python. |
 | 2 | **Security** | Runs the code scanners and OSV, deduplicates findings and records any scanner that failed, so a partial scan never reads as "all clear". |
-| 3 | **Developer** | Picks the findings to fix, tries a deterministic codemod when one covers them all, otherwise asks the configured model for structured edits. |
+| 3 | **Developer** | Picks the findings to fix. Code findings go to the configured model for structured edits, or to a deterministic codemod when one covers them all. Vulnerable pins are moved to a fixed release deterministically. |
 | 4 | **Validator** | Runs the checks on the base revision and on the patch, rescans for new high or critical findings and asks the developer for a repair when needed. |
 | 5 | **Reviewer** | Pauses for your decision when `OROD_REQUIRE_HUMAN_APPROVAL` is set: approve, reject or regenerate with feedback. |
 | 6 | **Publish** | Commits only if the working tree still matches the validated diff exactly, then opens a draft PR through GitHub CLI. |
@@ -179,7 +182,7 @@ the SSE stream with `Last-Event-ID` or replay a finished run. More detail is in
 
 ## Evaluation
 
-OROD is measured against a controlled vulnerability corpus. 20 hermetic cases (each with
+OROD is measured against a controlled vulnerability corpus. 21 hermetic cases (each with
 a known vulnerability, an expected finding and an expected outcome) are run through the
 real agent pipeline; detection, remediation, policy compliance, latency and cost are reported.
 
@@ -187,12 +190,12 @@ real agent pipeline; detection, remediation, policy compliance, latency and cost
 
 | Model | Detection F1 | Recall | Precision | Auto-fix rate | Patch validity | Policy | Regressions | Median run | Tokens | Cost |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `deterministic-baseline` | 1.00 | 100% | 100% | 6% (1/16) | 12% | 2/2 | 0 | 0.6s | 0 | $0.00 |
-| `qwen2.5-coder:14b` | 1.00 | 100% | 100% | 88% (14/16) | 100% | 2/2 | 0 | 7.2s | 13,437 | $0.00 |
+| `deterministic-baseline` | 1.00 | 100% | 100% | 12% (2/17) | 17% | 2/2 | 0 | 0.6s | 0 | $0.00 |
+| `qwen2.5-coder:14b` | 1.00 | 100% | 100% | 88% (15/17) | 100% | 2/2 | 0 | 7.6s | 13,437 | $0.00 |
 
 <!-- EVAL_TABLE_END -->
 
-- **Auto-fix rate** counts the 16 cases that expect a validated patch.
+- **Auto-fix rate** counts the 17 cases that expect a validated patch.
 - **Policy** counts cases where the pipeline should decline and leave the decision to a human.
 - **Regressions** counts patches that introduced a new high or critical finding.
 - The **`deterministic-baseline`** row shows what the codemods achieve with no model.
@@ -366,8 +369,9 @@ Architectural decisions are recorded in [`docs/decisions/`](docs/decisions).
 
 - Only Python repositories are analysed. A repository without Python code is stopped
   with a message instead of being reported clean.
-- Dependency upgrades are not automated yet. OSV findings are reported and count toward
-  the publishing gate, but a patch cannot resolve them yet.
+- Dependency upgrades cover exact `==` pins in the root `requirements*.txt` and
+  `pyproject.toml` only. Lockfiles, version ranges, extras and transitive dependencies
+  are reported and left for a human.
 - The dashboard relies on the Vite dev proxy for the API token, so a production build
   needs its own token handling.
 - Run control assumes a single backend process. After a restart, queued runs are marked

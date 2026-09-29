@@ -23,6 +23,7 @@ dependencies = [
   "sqlalchemy>=2.0",
   "structlog>=25.1",
   "tenacity>=9.0",
+  "packaging>=24",
 ]
 
 [dependency-groups]
